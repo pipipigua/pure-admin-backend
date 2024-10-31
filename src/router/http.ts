@@ -7,10 +7,10 @@ import { OkPacket } from 'mysql2';
 import { createMathExpr } from "svg-captcha";
 import secret from "../config";
 import Logger from "../loaders/logger";
+import { getOperator } from "../utils/auth";
 import { Message } from "../utils/enums";
 import { connection } from "../utils/mysql";
 import { logOperation, ModuleType, OperationType } from "../utils/operationLog";
-
 const utils = require("@pureadmin/utils");
 
 /** 保存验证码 */
@@ -84,11 +84,11 @@ const login = async (req: Request, res: Response) => {
     if (data.length === 0) {
       // 记录登录失败日志
       logOperation({
-        userId: 0,
-        username: username,
+        operatorId: 0,                    // 改为 operatorId
+        operatorName: username,           // 改为 operatorName
         action: OperationType.LOGIN,
         module: ModuleType.AUTH,
-        description: `用户登录失败：用户不存在 (${username})`,
+        content: `用户登录失败：数据库错误`,  // 改为 content
         ip: req.ip || ''
       });
 
@@ -102,15 +102,15 @@ const login = async (req: Request, res: Response) => {
       // 验证密码
       const hashedPassword = createHash("md5").update(password).digest("hex");
       if (hashedPassword !== user.password) {
-        // 记录登录失败日志
-        logOperation({
-          userId: 0,
-          username: username,
-          action: OperationType.LOGIN,
-          module: ModuleType.AUTH,
-          description: `用户登录失败：密码错误 (${username})`,
-          ip: req.ip || ''
-        });
+      // 记录用户不存在日志
+      logOperation({
+        operatorId: 0,
+        operatorName: username,
+        action: OperationType.LOGIN,
+        module: ModuleType.AUTH,
+        content: `用户登录失败：用户不存在`,
+        ip: req.ip || ''
+      });
         return res.json({
           success: false,
           data: { message: "密码错误" }
@@ -128,11 +128,11 @@ const login = async (req: Request, res: Response) => {
       );
       // 记录登录成功日志
       logOperation({
-        userId: user.id,
-        username: user.username,
+        operatorId: user.id,
+        operatorName: user.username,
         action: OperationType.LOGIN,
         module: ModuleType.AUTH,
-        description: `用户登录成功 (${username})`,
+        content: `用户登录成功 (${username})`,
         ip: req.ip || ''
       });
       await res.json({
@@ -411,7 +411,10 @@ const updateList = async (req: Request, res: Response) => {
     // 构建更新字段
     const updateFields = [];
     const updateValues = [];
-    
+
+
+
+
     // 检查并添加每个可更新字段
     if (userData.username) {
       updateFields.push("username = ?");
@@ -471,16 +474,18 @@ const updateList = async (req: Request, res: Response) => {
           data: { message: "更新用户失败" }
         });
       }
-      // 直接使用更新的用户信息记录日志
+      const operator = getOperator(req);
+      // 记录操作日志
       logOperation({
-        userId: Number(id),  // 转换为数字
-        username: userData.username || userData.name,  // 使用更新的用户信息
-        action: OperationType.UPDATE,
-        module: ModuleType.USER,
-        description: `更新用户信息:ID=${id}, 字段：${updateFields.join(', ')}`,
+        operatorId: operator.id,          // 使用 decoded 而不是 operator
+        operatorName: operator.name,      // 使用 decoded 而不是 operator
+        targetId: Number(id),            // 被更新用户的ID
+        targetType: 'user',              // 被操作对象类型
+        action: OperationType.UPDATE,    // 操作类型
+        module: ModuleType.USER,         // 模块
+        content: `更新用户信息：${JSON.stringify(userData)}`,  // 操作内容
         ip: req.ip || ''
       });
-
       // 如果有角色信息，更新用户角色
       if (userData.roles && userData.roles.length > 0) {
         // 先删除原有角色
@@ -590,6 +595,7 @@ const deleteList = async (req: Request, res: Response) => {
               });
             });
           }
+          // 记录删除操作日志
 
           // 提交事务
           connection.commit(function(err) {
@@ -602,11 +608,23 @@ const deleteList = async (req: Request, res: Response) => {
                 });
               });
             }
+            const operator = getOperator(req);
+            logOperation({
+              operatorId: operator.id,
+              operatorName: operator.name,
+              targetId: Number(id),
+              targetType: 'user',
+              action: OperationType.DELETE,
+              module: ModuleType.USER,
+              content: `删除用户：${id}`,
+              ip: req.ip || ''
+            });
             res.json({
               success: true,
               data: { message: Message[8] }
             });
           });
+
         });
       });
     });

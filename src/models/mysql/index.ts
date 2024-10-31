@@ -44,17 +44,19 @@ const userRole = `
 
 /** 创建操作日志表 */
 const operationLogs = `
-  CREATE TABLE IF NOT EXISTS operation_logs (
+CREATE TABLE IF NOT EXISTS operation_logs (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT NOT NULL,
-    username VARCHAR(255),
-    action VARCHAR(255) NOT NULL COMMENT '操作类型：新增、修改、删除等',
-    module VARCHAR(255) NOT NULL COMMENT '操作模块：用户管理、角色管理等',
-    description TEXT COMMENT '操作详细描述',
+    operator_id INT NOT NULL COMMENT '操作者ID',
+    operator_name VARCHAR(100) NOT NULL COMMENT '操作者名称',
+    target_id INT COMMENT '被操作对象ID',
+    target_type VARCHAR(50) COMMENT '被操作对象类型（如：user, role等）',
+    action VARCHAR(50) NOT NULL COMMENT '操作类型：CREATE, UPDATE, DELETE等',
+    module VARCHAR(50) NOT NULL COMMENT '操作模块：用户管理、角色管理等',
+    content TEXT COMMENT '操作内容（可以存储详细的修改信息）',
     ip VARCHAR(50) COMMENT '操作IP',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志表'
+    FOREIGN KEY (operator_id) REFERENCES users(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志表';
 `;
 
 export { operationLogs, role, user, userRole };
