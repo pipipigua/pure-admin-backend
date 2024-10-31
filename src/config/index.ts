@@ -15,7 +15,7 @@ export default {
   options: {
     swaggerDefinition: {
       info: {
-        description: "pure-admin官方后端",
+        description: "HOUKONG",
         title: "Swagger",
         version: require("../../package.json").version,
       },
@@ -51,10 +51,11 @@ export default {
     concurrency: parseInt(process.env.AGENDA_CONCURRENCY, 10),
   },
   mysql: {
-    host: "localhost",
+    host: "43.156.106.134",
     charset: "utf8_general_ci",
-    user: "root",
-    password: "123456789",
+    user: "houkong",
+    password: "P@55w0rd",
+    database: "houkong",
   },
   mongodb: {},
   sqlite: {},

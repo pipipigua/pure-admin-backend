@@ -4,7 +4,7 @@ import Logger from "../loaders/logger";
 
 /** user数据库 */
 export const connection = mysql.createConnection(
-  Object.assign({ database: "user" }, mysqlConfig.mysql)
+  Object.assign({ database: "houkong" }, mysqlConfig.mysql)
 );
 
 export function queryTable(s: string): void {

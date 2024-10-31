@@ -33,5 +33,9 @@
     "typescript": "^4.8.4",
     "winston": "^3.8.2"
   },
-  "repository": "https://github.com/xiaoxian521/pure-admin-backend"
+  "repository": "https://github.com/xiaoxian521/pure-admin-backend",
+  "dependencies": {
+    "@types/xlsx": "^0.0.36",
+    "xlsx": "^0.18.5"
+  }
 }

@@ -1,25 +1,29 @@
 import app from "./app";
 // import * as open from "open";
-import config from "./config";
 import * as dayjs from "dayjs";
 import * as multer from "multer";
-import { user } from "./models/mysql";
+import config from "./config";
 import Logger from "./loaders/logger";
-import { queryTable } from "./utils/mysql";
+import { importUsersFromLocalExcel } from "./router/excel";
+import { getRoleList, getUserList } from "./router/http";
+// import { queryTable } from "./utils/mysql";
 const expressSwagger = require("express-swagger-generator")(app);
 expressSwagger(config.options);
-
-queryTable(user);
+// 初始化数据库表
+// queryTable(user);
+// queryTable(role);
+// queryTable(userRole);
+// queryTable(operationLogs);
 
 import {
+  captcha,
+  deleteList,
   login,
   register,
-  updateList,
-  deleteList,
   searchPage,
   searchVague,
+  updateList,
   upload,
-  captcha,
 } from "./router/http";
 
 app.post("/login", (req, res) => {
@@ -46,11 +50,27 @@ app.post("/searchVague", (req, res) => {
   searchVague(req, res);
 });
 
+// 添加获取用户列表路由
+app.get("/user/list", (req, res) => {
+  getUserList(req, res);
+});
 // 新建存放临时文件的文件夹
 const upload_tmp = multer({ dest: "upload_tmp/" });
 app.post("/upload", upload_tmp.any(), (req, res) => {
   upload(req, res);
 });
+// 添加获取角色列表路由
+app.get("/roles", (req, res) => {  // 注意这里的路径
+  console.log("收到获取角色列表请求");  // 添加日志
+  getRoleList(req, res);
+});
+
+
+// Excel导入用户路由
+app.post("/api/excel/import-local", (req, res) => {
+  importUsersFromLocalExcel(req, res);
+});
+
 
 app.get("/captcha", (req, res) => {
   captcha(req, res);
