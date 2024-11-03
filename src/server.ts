@@ -7,6 +7,8 @@ import Logger from "./loaders/logger";
 // import { operationLogs, role, user, userRole } from "./models/mysql";
 import { importUsersFromLocalExcel } from "./router/excel";
 import { getRoleList, getUserList } from "./router/http";
+import { queryTable, connection } from "./utils/mysql";
+
 // import { queryTable } from "./utils/mysql";
 const expressSwagger = require("express-swagger-generator")(app);
 expressSwagger(config.options);
@@ -100,6 +102,156 @@ app.ws("/socket", function (ws, req) {
     );
   });
 });
+
+// Endpoint to get distinct years
+app.get("/api/years", (req, res) => {
+  const query = "SELECT DISTINCT year FROM points";
+  connection.query(query, (error, results) => {
+    if (error) {
+      console.error("Database query error:", error);
+      return res.status(500).send("Database query error");
+    }
+    // Return full results
+    res.json(results);
+  });
+});
+
+// Endpoint to get distinct subjects
+app.get("/api/subjects", (req, res) => {
+  const query = "SELECT DISTINCT subject FROM points";
+  connection.query(query, (error, results) => {
+    if (error) {
+      console.error("Database query error:", error);
+      return res.status(500).send("Database query error");
+    }
+    // Return full results
+    res.json(results);
+  });
+});
+
+// Endpoint to get distinct grades
+app.get("/api/grades", (req, res) => {
+  const query = "SELECT DISTINCT sc_lev FROM points";
+  connection.query(query, (error, results) => {
+    if (error) {
+      console.error("Database query error:", error);
+      return res.status(500).send("Database query error");
+    }
+    // Return full results
+    res.json(results);
+  });
+});
+
+// Endpoint to get distinct exam types
+app.get("/api/exam-types", (req, res) => {
+  const query = "SELECT DISTINCT exam_type FROM points";
+  connection.query(query, (error, results) => {
+    if (error) {
+      console.error("Database query error:", error);
+      return res.status(500).send("Database query error");
+    }
+    // Return full results
+    res.json(results);
+  });
+});
+
+// Modify your existing /query-points endpoint to accept query parameters
+app.get("/query-points", (req, res) => {
+  const { year, subject, grade, examType } = req.query;
+
+  // Check if all parameters are provided
+  if (!year || !subject || !grade || !examType) {
+    return res.status(400).send("Missing query parameters");
+  }
+
+  // Build the query with the provided parameters
+  const query = `
+    SELECT * FROM points
+    WHERE year = ? AND subject = ? AND sc_lev = ? AND exam_type = ?
+  `;
+
+  // Execute the query with parameterized values to prevent SQL injection
+  connection.query(query, [year, subject, grade, examType], (error, results) => {
+    if (error) {
+      console.error("Database query error:", error);
+      return res.status(500).send("Database query error");
+    }
+    res.json(results);
+  });
+});
+
+
+// Modify your existing /query-points endpoint to accept query parameters
+app.get("/query-points", (req, res) => {
+  const { year, subject, grade, examType } = req.query;
+
+  // Check if all parameters are provided
+  if (!year || !subject || !grade || !examType) {
+    return res.status(400).send("Missing query parameters");
+  }
+
+  // Build the query with the provided parameters
+  const query = `
+    SELECT * FROM points
+    WHERE year = ? AND subject = ? AND sc_lev = ? AND exam_type = ?
+  `;
+
+  // Execute the query with parameterized values to prevent SQL injection
+  connection.query(query, [year, subject, grade, examType], (error, results) => {
+    if (error) {
+      console.error("Database query error:", error);
+      return res.status(500).send("Database query error");
+    }
+    res.json(results);
+  });
+});
+
+// index.js (or your server file)
+app.post("/update-scores", (req, res) => {
+  const students = req.body.data;
+
+  // Validate input data
+  if (!students || !Array.isArray(students)) {
+    return res.status(400).send("Invalid data format");
+  }
+
+  // Construct promises for batch updates
+  const queries = students.map(student => {
+    const { stnum, point_adj, year, exam_type, subject } = student;
+
+    return new Promise((resolve, reject) => {
+      const query = `
+        UPDATE points
+        SET point_adj = ?
+        WHERE stnum = ? AND year = ? AND exam_type = ? AND subject = ?
+      `;
+      // Use parameterized queries to prevent SQL injection
+      connection.query(
+        query,
+        [point_adj, stnum, year, exam_type, subject],
+        (error, results) => {
+          if (error) {
+            console.error("Database update error:", error);
+            reject(error);
+          } else {
+            resolve(results);
+          }
+        }
+      );
+    });
+  });
+
+  // Execute all queries
+  Promise.all(queries)
+    .then(() => {
+      res.status(200).send("Scores updated successfully");
+    })
+    .catch(error => {
+      console.error("Error updating scores:", error);
+      res.status(500).send("Database update error");
+    });
+});
+
 
 app
   .listen(config.port, () => {
