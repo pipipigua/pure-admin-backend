@@ -3,11 +3,11 @@ import { Request, Response } from "express";
 import * as fs from "fs";
 import * as jwt from "jsonwebtoken";
 import * as mysql from "mysql2";
-import { OkPacket } from 'mysql2';
+import { RowDataPacket } from 'mysql2';
 import { createMathExpr } from "svg-captcha";
 import secret from "../config";
 import Logger from "../loaders/logger";
-import { getOperator } from "../utils/auth";
+import { getClientIP, getOperator } from "../utils/auth";
 import { Message } from "../utils/enums";
 import { connection } from "../utils/mysql";
 import { logOperation, ModuleType, OperationType } from "../utils/operationLog";
@@ -17,8 +17,7 @@ const utils = require("@pureadmin/utils");
 let generateVerify: number;
 
 /** 过期时间 单位：毫秒 默认 1分钟过期，方便演示 */
-let expiresIn = 60000;
-
+let expiresIn = 2 * 60 * 60 * 1000; 
 /**
  * @typedef Error
  * @property {string} code.required
@@ -59,100 +58,122 @@ let expiresIn = 60000;
 const login = async (req: Request, res: Response) => {
   const { username, password } = req.body;
   
-  console.log('Login attempt:', { username, password });
+  console.log('Login attempt:', { username }); // 不要打印密码
 
-  let sql = `
-    SELECT u.*, GROUP_CONCAT(r.code) as roles 
-    FROM users u 
-    LEFT JOIN user_roles ur ON u.id = ur.user_id 
-    LEFT JOIN roles r ON ur.role_id = r.id 
-    WHERE u.username = ? AND u.status = 1 
+  // 先查询用户是否存在
+  const sql = `
+    SELECT u.*, GROUP_CONCAT(DISTINCT r.code) as roles, 
+           GROUP_CONCAT(DISTINCT p.code) as permissions
+    FROM users u
+    LEFT JOIN user_roles ur ON u.id = ur.user_id
+    LEFT JOIN roles r ON ur.role_id = r.id
+    LEFT JOIN role_permissions rp ON r.id = rp.role_id
+    LEFT JOIN permissions p ON rp.permission_id = p.id
+    WHERE u.username = ?
     GROUP BY u.id
   `;
   
   connection.query(sql, [username], async function (err, data: any) {
-    // console.log('Query result:', { err, data });
-
     if (err) {
-      // Logger.error(err);
+      Logger.error(err);
       return res.json({
         success: false,
-        data: { message: "数据库查询错误" }
+        data: { message: "系统错误" }
       });
     }
 
+    // 用户不存在
     if (data.length === 0) {
-      // 记录登录失败日志
-      logOperation({
-        operatorId: 0,                    // 改为 operatorId
-        operatorName: username,           // 改为 operatorName
-        action: OperationType.LOGIN,
-        module: ModuleType.AUTH,
-        content: `用户登录失败：数据库错误`,  // 改为 content
-        ip: req.ip || ''
-      });
-
-      await res.json({
-        success: false,
-        data: { message: Message[1] }  // 用户不存在
-      });
-    } else {
-      const user = data[0];
-      
-      // 验证密码
-      const hashedPassword = createHash("md5").update(password).digest("hex");
-      if (hashedPassword !== user.password) {
-      // 记录用户不存在日志
       logOperation({
         operatorId: 0,
         operatorName: username,
         action: OperationType.LOGIN,
         module: ModuleType.AUTH,
         content: `用户登录失败：用户不存在`,
-        ip: req.ip || ''
+        ip: getClientIP(req)
       });
-        return res.json({
-          success: false,
-          data: { message: "密码错误" }
-        });
-      }
 
-      const accessToken = jwt.sign(
-        {
-          id: user.id,           // 用户ID
-          username: user.username,  // 用户名
-          name: user.name 
-        },
-        secret.jwtSecret,
-        { expiresIn }
-      );
-      // 记录登录成功日志
-      logOperation({
-        operatorId: user.id,
-        operatorName: user.username,
-        action: OperationType.LOGIN,
-        module: ModuleType.AUTH,
-        content: `用户登录成功 (${username})`,
-        ip: req.ip || ''
-      });
-      await res.json({
-        success: true,
-        data: {
-          message: Message[2],
-          username: user.name,    // 返回 name 字段作为用户名
-          userid: user.userid,    // 返回 userid
-          roles: user.roles ? user.roles.split(',') : [],
-          accessToken,
-          refreshToken: "eyJhbGciOiJIUzUxMiJ9.adminRefresh",
-          expires: new Date(new Date()).getTime() + expiresIn,
-          department: user.department,
-          position: user.position,
-          mobile: user.mobile,
-          email: user.email,
-          avatar: user.avatar
-        }
+      return res.json({
+        success: false,
+        data: { message: Message[1] }  // 用户不存在
       });
     }
+
+    const user = data[0];
+    
+    // 验证密码
+    const hashedPassword = createHash("md5").update(password).digest("hex");
+    if (hashedPassword !== user.password) {
+      logOperation({
+        operatorId: 0,
+        operatorName: username,
+        action: OperationType.LOGIN,
+        module: ModuleType.AUTH,
+        content: `用户登录失败：密码错误`,
+        ip: getClientIP(req)
+      });
+      
+      return res.json({
+        success: false,
+        data: { message: "密码错误" }
+      });
+    }
+
+    // 验证用户状态
+    if (user.status !== 1) {
+      logOperation({
+        operatorId: 0,
+        operatorName: username,
+        action: OperationType.LOGIN,
+        module: ModuleType.AUTH,
+        content: `用户登录失败：账号已禁用`,
+        ip: getClientIP(req)
+      });
+      
+      return res.json({
+        success: false,
+        data: { message: "账号已禁用" }
+      });
+    }
+
+    // 登录成功，生成 token
+    const accessToken = jwt.sign(
+      {
+        id: user.id,
+        username: user.username,
+        name: user.name 
+      },
+      secret.jwtSecret,
+      { expiresIn }
+    );
+
+    // 记录登录成功日志
+    logOperation({
+      operatorId: user.id,
+      operatorName: user.username,
+      action: OperationType.LOGIN,
+      module: ModuleType.AUTH,
+      content: `用户登录成功`,
+      ip: getClientIP(req)
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        message: Message[2],
+        username: user.name,
+        userid: user.userid,
+        roles: user.roles ? user.roles.split(',') : [],
+        accessToken,
+        refreshToken: "eyJhbGciOiJIUzUxMiJ9.adminRefresh",
+        expires: new Date(new Date()).getTime() + expiresIn,
+        department: user.department,
+        position: user.position,
+        mobile: user.mobile,
+        email: user.email,
+        avatar: user.avatar
+      }
+    });
   });
 };
 // 刷新 token
@@ -164,7 +185,14 @@ const refreshToken = async (req: Request, res: Response) => {
     const decoded = jwt.verify(refreshToken, secret.jwtSecret) as any;
     
     // 查询用户是否还有效
-    const sql = `SELECT * FROM users WHERE id = ? AND status = 1`;
+    const sql = `
+      SELECT u.*, GROUP_CONCAT(DISTINCT r.code) as roles
+      FROM users u
+      LEFT JOIN user_roles ur ON u.id = ur.user_id
+      LEFT JOIN roles r ON ur.role_id = r.id
+      WHERE u.id = ? AND u.status = 1
+      GROUP BY u.id
+    `;
     
     connection.query(sql, [decoded.id], async function (err, data: any) {
       if (err || data.length === 0) {
@@ -175,6 +203,7 @@ const refreshToken = async (req: Request, res: Response) => {
       }
 
       const user = data[0];
+      
       // 生成新的 access token
       const accessToken = jwt.sign(
         {
@@ -183,24 +212,23 @@ const refreshToken = async (req: Request, res: Response) => {
           name: user.name
         },
         secret.jwtSecret,
-        { expiresIn }
+        { expiresIn: '2h' }  // token 有效期2小时
       );
 
-      res.json({
+      return res.json({
         success: true,
         data: {
           accessToken,
-          refreshToken: accessToken, // 简单起见，使用相同的 token
-          expires: new Date(new Date()).getTime() + expiresIn
+          refreshToken: accessToken, // 为简单起见，使用相同的 token
+          expires: new Date().getTime() + (2 * 60 * 60 * 1000) // 2小时后过期
         }
       });
     });
   } catch (error) {
-    res.json({
+    Logger.error('刷新token错误:', error);
+    return res.json({
       success: false,
-      data: {
-        message: "refresh token 无效"
-      }
+      data: { message: "refresh token 无效" }
     });
   }
 };
@@ -230,62 +258,30 @@ const refreshToken = async (req: Request, res: Response) => {
  * @security JWT
  */
 const register = async (req: Request, res: Response) => {
-  const userData = req.body;
+  const { username, password, name } = req.body;
+  const DEFAULT_ROLE_ID = 2;  // 设置默认角色 ID 为 2
 
-  if (userData.password.length < 6)
-    return res.json({
-      success: false,
-      data: { message: Message[4] },
-    });
+  try {
+    // 检查用户名是否已存在
+    const checkSql = "SELECT id FROM users WHERE username = ?";
+    connection.query(checkSql, [username], async function(err, result: any) {
+      if (err) {
+        Logger.error(err);
+        return res.json({
+          success: false,
+          data: { message: "系统错误" }
+        });
+      }
 
-  let sql = "SELECT * FROM users WHERE username = ?";
-  
-  connection.query(sql, [userData.username], async (err, data: any) => {
-    if (err) {
-      Logger.error(err);
-      return res.json({
-        success: false,
-        data: { message: "数据库查询错误" }
-      });
-    }
+      if (result.length > 0) {
+        return res.json({
+          success: false,
+          data: { message: Message[5] }  // 用户名已存在
+        });
+      }
 
-    if (data.length > 0) {
-      await res.json({
-        success: false,
-        data: { message: Message[5] },
-      });
-    } else {
-      const insertUserSql = `
-        INSERT INTO users (
-          username,
-          userid,
-          name,
-          password,
-          department,
-          position,
-          mobile,
-          gender,
-          email,
-          avatar,
-          status,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
-      `;
-
-      const values = [
-        userData.username,
-        userData.userid || null,
-        userData.name || userData.username,
-        createHash("md5").update(userData.password).digest("hex"),
-        userData.department || null,
-        userData.position || null,
-        userData.mobile || null,
-        userData.gender || null,
-        userData.email || null,
-        userData.avatar || null
-      ];
-
-      connection.query(insertUserSql, values, async function (err, result: OkPacket) {  // 指定 result 类型为 OkPacket
+      // 开始事务
+      connection.beginTransaction(async function(err) {
         if (err) {
           Logger.error(err);
           return res.json({
@@ -294,37 +290,81 @@ const register = async (req: Request, res: Response) => {
           });
         }
 
-        // 处理角色关联
-        if (userData.roles && userData.roles.length > 0) {
-          const userId = result.insertId;  // 现在 TypeScript 知道 result 有 insertId 属性
-          const insertRolesSql = `
-            INSERT INTO user_roles (user_id, role_id)
-            SELECT ?, id FROM roles WHERE code IN (?)
-          `;
-          
-          connection.query(insertRolesSql, [userId, userData.roles], function(err) {
-            if (err) {
+        const hashedPassword = createHash("md5").update(password).digest("hex");
+        
+        // 插入用户基本信息
+        const insertSql = `
+          INSERT INTO users (
+            username, password, name, status,
+            userid, department, position,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, 1, ?, ?, ?, NOW(), NOW())
+        `;
+
+        connection.query(insertSql, [username, hashedPassword, name], function(err, result: any) {
+          if (err) {
+            return connection.rollback(function() {
               Logger.error(err);
-              return res.json({
+              res.json({
                 success: false,
-                data: { message: "添加用户角色失败" }
+                data: { message: "注册失败" }
+              });
+            });
+          }
+
+          const userId = result.insertId;
+
+          // 为新用户分配默认角色
+          const insertRoleSql = "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)";
+          connection.query(insertRoleSql, [userId, DEFAULT_ROLE_ID], function(err) {
+            if (err) {
+              return connection.rollback(function() {
+                Logger.error(err);
+                res.json({
+                  success: false,
+                  data: { message: "分配角色失败" }
+                });
               });
             }
-            
-            res.json({
-              success: true,
-              data: { message: Message[6] }
+
+            // 提交事务
+            connection.commit(function(err) {
+              if (err) {
+                return connection.rollback(function() {
+                  Logger.error(err);
+                  res.json({
+                    success: false,
+                    data: { message: "注册失败" }
+                  });
+                });
+              }
+
+              // 记录注册操作日志
+              logOperation({
+                operatorId: userId,
+                operatorName: username,
+                action: OperationType.CREATE,
+                module: ModuleType.AUTH,
+                content: `新用户注册：${username}`,
+                ip: getClientIP(req)
+              });
+
+              res.json({
+                success: true,
+                data: { message: Message[6] }  // 注册成功
+              });
             });
           });
-        } else {
-          res.json({
-            success: true,
-            data: { message: Message[6] }
-          });
-        }
+        });
       });
-    }
-  });
+    });
+  } catch (error) {
+    Logger.error(error);
+    return res.json({
+      success: false,
+      data: { message: "注册失败" }
+    });
+  }
 };
 // 添加获取用户列表的处理函数
 const getUserList = async (req: Request, res: Response) => {
@@ -343,11 +383,13 @@ const getUserList = async (req: Request, res: Response) => {
     const sql = `
       SELECT 
         u.*,
-        GROUP_CONCAT(r.code) as roles
+        GROUP_CONCAT(r.code) as roles,
+        MIN(r.id) as primary_role_id  
       FROM users u
       LEFT JOIN user_roles ur ON u.id = ur.user_id
       LEFT JOIN roles r ON ur.role_id = r.id
-      GROUP BY u.id
+      GROUP BY u.id 
+      ORDER BY primary_role_id ASC, u.id ASC  
     `;
 
     connection.query(sql, (err, data: any) => {
@@ -484,9 +526,9 @@ const updateList = async (req: Request, res: Response) => {
         action: OperationType.UPDATE,    // 操作类型
         module: ModuleType.USER,         // 模块
         content: `更新用户信息：${JSON.stringify(userData)}`,  // 操作内容
-        ip: req.ip || ''
+        ip: getClientIP(req)
       });
-      // 如果有角色信息，更新用户角色
+      // 如果有角色信息，更新用户角色和权限
       if (userData.roles && userData.roles.length > 0) {
         // 先删除原有角色
         const deleteRolesSql = "DELETE FROM user_roles WHERE user_id = ?";
@@ -499,7 +541,7 @@ const updateList = async (req: Request, res: Response) => {
             });
           }
 
-          // 插入新角色
+          // 插入新角色并获取相应的权限
           const insertRolesSql = `
             INSERT INTO user_roles (user_id, role_id)
             SELECT ?, id FROM roles WHERE code IN (?)
@@ -617,7 +659,7 @@ const deleteList = async (req: Request, res: Response) => {
               action: OperationType.DELETE,
               module: ModuleType.USER,
               content: `删除用户：${id}`,
-              ip: req.ip || ''
+              ip: getClientIP(req)
             });
             res.json({
               success: true,
@@ -643,41 +685,132 @@ const deleteList = async (req: Request, res: Response) => {
  * @returns {object} 200 - 角色列表
  * @security JWT
  */
+interface RoleRow extends RowDataPacket {
+  id: number;
+  name: string;
+  code: string;
+  description: string;
+  status: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface PermissionRow extends RowDataPacket {
+  code: string;
+}
+
+interface RoleWithPermissions {
+  id: number;
+  name: string;
+  code: string;
+  description: string;
+  status: number;
+  created_at: Date;
+  updated_at: Date;
+  permissions: string[];
+}
+
+interface PermissionTree extends RowDataPacket {
+  id: number;
+  name: string;
+  code: string;
+  type: string;
+  description: string;
+  parent_id: number | null;
+  level: number;
+  path: string;
+  children?: PermissionTree[];
+}
+
 const getRoleList = async (req: Request, res: Response) => {
   try {
     const authorizationHeader = req.get("Authorization");
     const accessToken = authorizationHeader.replace("Bearer ", "");
     const decoded = jwt.verify(accessToken, secret.jwtSecret);
-    console.log('开始查询角色数据');  // 添加日志
-
-    // 查询所有角色
-    const sql = `
-      SELECT r.id, r.name, r.code, r.status, r.created_at
-      FROM roles r
-      WHERE r.status = 1
-      ORDER BY r.id ASC
+    // 1. 获取所有角色
+    const rolesSql = `
+      SELECT id, name, code, description, status, created_at
+      FROM roles 
+      WHERE status = 1
+      ORDER BY id ASC
     `;
-    
-    console.log('执行 SQL:', sql);  // 添加日志
-    
-    connection.query(sql, function(err, roles) {
+
+    connection.query<RoleRow[]>(rolesSql, async function(err, roles) {
       if (err) {
-        console.error('数据库查询错误:', err);
+        console.error('获取角色列表失败:', err);
         return res.json({
           success: false,
           data: { message: "获取角色列表失败" }
         });
       }
 
-      console.log('查询到的角色:', roles);  // 添加日志
-      
-      // 立即返回结果
-      return res.json({
-        success: true,
-        data: { roles }
+      // 2. 获取所有权限
+      const permissionsSql = `
+        SELECT id, name, code, type, description, parent_id
+        FROM permissions
+        WHERE status = 1
+        ORDER BY id ASC
+      `;
+      connection.query<PermissionTree[]>(permissionsSql, async (err, permissions) => {
+        if (err) {
+          console.error('获取权限列表失败:', err);
+          return res.json({
+            success: false,
+            data: { message: "获取权限列表失败" }
+          });
+        }
+        try {
+          // 3. 获取每个角色的权限
+          const rolesWithPermissions = await Promise.all(roles.map(async (role) => {
+              const rolePremsSql = `
+                SELECT p.code
+                FROM permissions p
+                INNER JOIN role_permissions rp ON p.id = rp.permission_id
+                WHERE rp.role_id = ? AND p.status = 1
+              `;
+            return new Promise<RoleWithPermissions>((resolve, reject) => {
+              connection.query<PermissionRow[]>(
+                rolePremsSql,
+                [role.id],
+                (err, perms) => {
+                  if (err) {
+                    reject(err);
+                    return;
+                  }
+                  resolve({
+                    ...role,
+                    permissions: perms.map(p => p.code)
+                  });
+                }
+              );
+            });
+          }));
+          // 4. 构建权限树
+          const buildTree = (items: PermissionTree[], parentId: number | null = null): PermissionTree[] => {
+            return items
+              .filter(item => item.parent_id === parentId)
+              .map(item => ({
+                ...item,
+                children: buildTree(items, item.id)
+              }));
+          };
+          // 5. 返回结果
+          return res.json({
+            success: true,
+            data: {
+              roles: rolesWithPermissions,
+              permissions: buildTree(permissions)
+            }
+          });
+        } catch (error) {
+          console.error('处理角色权限数据失败:', error);
+          return res.json({
+            success: false,
+            data: { message: "处理角色权限数据失败" }
+          });
+        }
       });
     });
-
   } catch (error) {
     console.error('获取角色列表错误:', error);
     return res.status(401).json({
@@ -729,6 +862,104 @@ const searchPage = async (req: Request, res: Response) => {
     }
   });
 };
+
+
+
+const updateRolePermissions = async (req: Request, res: Response) => {
+  try {
+    const authorizationHeader = req.get("Authorization");
+    const accessToken = authorizationHeader.replace("Bearer ", "");
+    const decoded = jwt.verify(accessToken, secret.jwtSecret);
+    const operator = getOperator(req);
+    
+    const roleId = req.params.roleId;
+    const permissions = req.body.permissions;
+
+    // 1. 先获取角色信息
+    const getRoleSql = "SELECT name FROM roles WHERE id = ?";
+    connection.query(getRoleSql, [roleId], (err, roleResults) => {
+      if (err) {
+        Logger.error('获取角色信息失败:', err);
+        return res.json({
+          success: false,
+          message: "更新权限失败"
+        });
+      }
+
+      const roleName = roleResults[0]?.name;
+
+      // 2. 删除该角色的所有权限
+      const deleteSql = `DELETE FROM role_permissions WHERE role_id = ?`;
+      connection.query(deleteSql, [roleId], (err) => {
+        if (err) {
+          Logger.error('删除角色权限失败:', err);
+          return res.json({
+            success: false,
+            message: "更新权限失败"
+          });
+        }
+
+        // 3. 如果有新的权限，则插入
+        if (permissions && permissions.length > 0) {
+          const insertSql = `
+            INSERT INTO role_permissions (role_id, permission_id)
+            SELECT ?, id FROM permissions WHERE code IN (?)
+          `;
+          connection.query(insertSql, [roleId, permissions], (err) => {
+            if (err) {
+              Logger.error('插入角色权限失败:', err);
+              return res.json({
+                success: false,
+                message: "更新权限失败"
+              });
+            }
+
+            // 4. 记录操作日志
+            logOperation({
+              operatorId: operator.id,
+              operatorName: operator.name,
+              targetId: Number(roleId),
+              targetType: 'role',
+              action: OperationType.UPDATE,
+              module: ModuleType.ROLE,
+              content: `更新角色[${roleName}]的权限：${JSON.stringify(permissions)}`,
+              ip: getClientIP(req)
+            });
+
+            res.json({
+              success: true,
+              message: "更新权限成功"
+            });
+          });
+        } else {
+          // 如果没有新权限，也记录日志
+          logOperation({
+            operatorId: operator.id,
+            operatorName: operator.name,
+            targetId: Number(roleId),
+            targetType: 'role',
+            action: OperationType.UPDATE,
+            module: ModuleType.ROLE,
+            content: `清空角色[${roleName}]的所有权限`,
+            ip: getClientIP(req)
+          });
+
+          res.json({
+            success: true,
+            message: "更新权限成功"
+          });
+        }
+      });
+    });
+  } catch (error) {
+    Logger.error('更新角色权限错误:', error);
+    return res.status(500).json({
+      success: false,
+      message: "服务器错误"
+    });
+  }
+};
+
 
 /**
  * @typedef SearchVague
@@ -850,37 +1081,50 @@ const captcha = async (req: Request, res: Response) => {
   res.json({ success: true, data: { text: create.text, svg: create.data } });
 };
 // 添加获取动态路由的处理函数
+// pure-admin-backend/src/router/routes.ts
 const getAsyncRoutes = async (req: Request, res: Response) => {
-  // 这里返回你的动态路由配置
-  res.json({
-    success: true,
-    data: {
-      // 示例路由配置
-      routes: [
-        {
-          path: "/permission",
-          meta: {
-            title: "权限管理",
-            icon: "lollipop"
-          },
-          children: [
-            {
-              path: "/permission/page/index",
-              name: "PermissionPage",
-              meta: {
-                title: "页面权限",
-                roles: ["admin"]
-              }
+  try {
+    const authorizationHeader = req.get("Authorization");
+    const accessToken = authorizationHeader.replace("Bearer ", "");
+    const decoded = jwt.verify(accessToken, secret.jwtSecret);
+    
+    // 根据用户角色返回对应的路由
+    const routes = [
+      {
+        path: "/permission",
+        name: "Permission",
+        meta: {
+          title: "权限管理",
+          icon: "lollipop",
+          rank: 10
+        },
+        children: [
+          {
+            path: "/permission/role/index",
+            name: "PermissionRole",
+            meta: {
+              title: "角色权限",
+              roles: ["admin"]
             }
-          ]
-        }
-        // ... 其他路由配置
-      ]
-    }
-  });
+          }
+        ]
+      }
+    ];
+
+    res.json({
+      success: true,
+      data: routes
+    });
+  } catch (error) {
+    console.error('获取动态路由失败:', error);
+    res.status(401).json({
+      success: false,
+      message: "未授权"
+    });
+  }
 };
 export {
   captcha, deleteList, getAsyncRoutes, getRoleList, getUserList, login, refreshToken, register, searchPage,
-  searchVague, updateList, upload
+  searchVague, updateList, updateRolePermissions, upload
 };
 

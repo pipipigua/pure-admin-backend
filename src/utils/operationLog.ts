@@ -8,9 +8,9 @@ export enum OperationType {
   DELETE = 'DELETE',
   QUERY = 'QUERY',
   LOGIN = 'LOGIN',
+  REGISTER = 'REGISTER',
   UPLOAD = 'UPLOAD'
 }
-
 // 定义模块类型
 export enum ModuleType {
   USER = '用户管理',

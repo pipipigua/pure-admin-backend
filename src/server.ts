@@ -6,8 +6,8 @@ import config from "./config";
 import Logger from "./loaders/logger";
 // import { operationLogs, role, user, userRole } from "./models/mysql";
 import { importUsersFromLocalExcel } from "./router/excel";
-import { getRoleList, getUserList } from "./router/http";
-import { queryTable, connection } from "./utils/mysql";
+import { getAsyncRoutes, getRoleList, getUserList, refreshToken, updateRolePermissions } from "./router/http";
+import { connection } from "./utils/mysql";
 
 // import { queryTable } from "./utils/mysql";
 const expressSwagger = require("express-swagger-generator")(app);
@@ -57,18 +57,42 @@ app.post("/searchVague", (req, res) => {
 app.get("/user/list", (req, res) => {
   getUserList(req, res);
 });
+
+// 添加获取角色列表路由
+app.get("/get-async-routes", (req, res) => {
+  getAsyncRoutes(req, res);
+});
+app.get("/roles", (req, res) => {
+  // console.log("------------------------");
+  // console.log("收到获取角色列表请求");
+  // console.log("请求方法:", req.method);
+  // console.log("请求路径:", req.path);
+  // console.log("请求头:", req.headers);
+  // console.log("------------------------");
+  getRoleList(req, res);
+});
+app.post('/refresh-token', refreshToken);
+
+
+// 添加更新角色权限的路由
+app.put("/roles/:roleId/permissions", (req, res) => {
+  console.log("------------------------");
+  console.log("收到更新角色权限请求");
+  console.log("请求 URL:", req.originalUrl);
+  console.log("请求方法:", req.method);
+  console.log("请求路径:", req.path);
+  console.log("请求参数:", req.params);
+  console.log("请求体:", req.body);
+  console.log("请求头:", req.headers);
+  console.log("------------------------");
+  updateRolePermissions(req, res);
+});
+
 // 新建存放临时文件的文件夹
 const upload_tmp = multer({ dest: "upload_tmp/" });
 app.post("/upload", upload_tmp.any(), (req, res) => {
   upload(req, res);
 });
-// 添加获取角色列表路由
-app.get("/roles", (req, res) => {  // 注意这里的路径
-  console.log("收到获取角色列表请求");  // 添加日志
-  getRoleList(req, res);
-});
-
-
 // Excel导入用户路由
 app.post("/api/excel/import-local", (req, res) => {
   importUsersFromLocalExcel(req, res);
@@ -217,18 +241,19 @@ app.post("/update-scores", (req, res) => {
 
   // Construct promises for batch updates
   const queries = students.map(student => {
-    const { stnum, point_adj, year, exam_type, subject } = student;
+    const { point_adj, ratio_id,rank, id } = student;
 
     return new Promise((resolve, reject) => {
       const query = `
         UPDATE points
-        SET point_adj = ?
-        WHERE stnum = ? AND year = ? AND exam_type = ? AND subject = ?
+        SET point_adj = ?, button = 0 ,ratio_id = ?, rank = ?
+        WHERE id = ? 
       `;
       // Use parameterized queries to prevent SQL injection
+      console.log(query, point_adj, ratio_id,rank, id);
       connection.query(
         query,
-        [point_adj, stnum, year, exam_type, subject],
+        [point_adj, ratio_id,rank, id ],
         (error, results) => {
           if (error) {
             console.error("Database update error:", error);
@@ -252,7 +277,42 @@ app.post("/update-scores", (req, res) => {
     });
 });
 
+app.post('/add-ratio', (req, res) => {
+  const ratioData = req.body.data;
 
+  if (!ratioData || !Array.isArray(ratioData)) {
+    return res.status(400).send('Invalid data format');
+  }
+
+  const queries = ratioData.map(item => {
+    const { numa, numb, ratio, step, oragina, oranginb, sector } = item;
+
+    return new Promise((resolve, reject) => {
+      const query = `
+        INSERT INTO ratio (numa, numb, ratio, step, oragina, oranginb, sector)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`;
+      
+      connection.query(query, [numa, numb, ratio, step, oragina, oranginb, sector], (error, results) => {
+        if (error) {
+          console.error('Database insert error:', error);
+          reject(error);
+        } else {
+          resolve(results);
+          console.log('Data inserted successfully:', results);
+        }
+      });
+    });
+  });
+
+  Promise.all(queries)
+    .then(results => {
+      res.status(200).json({ success: true, results });
+    })
+    .catch(error => {
+      console.error('Error inserting data:', error);
+      res.status(500).json({ success: false, error: 'Failed to insert data' });
+    });
+});
 app
   .listen(config.port, () => {
     Logger.info(`
