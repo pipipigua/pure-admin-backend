@@ -217,19 +217,19 @@ app.post("/update-scores", (req, res) => {
 
   // Construct promises for batch updates
   const queries = students.map(student => {
-    const { point_adj, ratio_id,id } = student;
+    const { point_adj, ratio_id,rank, id } = student;
 
     return new Promise((resolve, reject) => {
       const query = `
         UPDATE points
-        SET point_adj = ?, button = 0 ,ratio_id = ?
+        SET point_adj = ?, button = 0 ,ratio_id = ?, rank = ?
         WHERE id = ? 
       `;
       // Use parameterized queries to prevent SQL injection
-      console.log(query, point_adj, ratio_id, id);
+      console.log(query, point_adj, ratio_id,rank, id);
       connection.query(
         query,
-        [point_adj, ratio_id, id],
+        [point_adj, ratio_id,rank, id ],
         (error, results) => {
           if (error) {
             console.error("Database update error:", error);
