@@ -217,18 +217,19 @@ app.post("/update-scores", (req, res) => {
 
   // Construct promises for batch updates
   const queries = students.map(student => {
-    const { stnum, point_adj, year, exam_type, subject } = student;
+    const { point_adj, ratio_id,id } = student;
 
     return new Promise((resolve, reject) => {
       const query = `
         UPDATE points
-        SET point_adj = ?
-        WHERE stnum = ? AND year = ? AND exam_type = ? AND subject = ?
+        SET point_adj = ?, button = 0 ,ratio_id = ?
+        WHERE id = ? 
       `;
       // Use parameterized queries to prevent SQL injection
+      console.log(query, point_adj, ratio_id, id);
       connection.query(
         query,
-        [point_adj, stnum, year, exam_type, subject],
+        [point_adj, ratio_id, id],
         (error, results) => {
           if (error) {
             console.error("Database update error:", error);
@@ -249,6 +250,43 @@ app.post("/update-scores", (req, res) => {
     .catch(error => {
       console.error("Error updating scores:", error);
       res.status(500).send("Database update error");
+    });
+});
+
+app.post('/add-ratio', (req, res) => {
+  const ratioData = req.body.data;
+
+  if (!ratioData || !Array.isArray(ratioData)) {
+    return res.status(400).send('Invalid data format');
+  }
+
+  const queries = ratioData.map(item => {
+    const { numa, numb, ratio, step, oragina, oranginb, sector } = item;
+
+    return new Promise((resolve, reject) => {
+      const query = `
+        INSERT INTO ratio (numa, numb, ratio, step, oragina, oranginb, sector)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`;
+      
+      connection.query(query, [numa, numb, ratio, step, oragina, oranginb, sector], (error, results) => {
+        if (error) {
+          console.error('Database insert error:', error);
+          reject(error);
+        } else {
+          resolve(results);
+          console.log('Data inserted successfully:', results);
+        }
+      });
+    });
+  });
+
+  Promise.all(queries)
+    .then(results => {
+      res.status(200).json({ success: true, results });
+    })
+    .catch(error => {
+      console.error('Error inserting data:', error);
+      res.status(500).json({ success: false, error: 'Failed to insert data' });
     });
 });
 
