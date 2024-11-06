@@ -313,6 +313,43 @@ app.post('/add-ratio', (req, res) => {
       res.status(500).json({ success: false, error: 'Failed to insert data' });
     });
 });
+
+app.post('/add-ratio', (req, res) => {
+  const ratioData = req.body.data;
+
+  if (!ratioData || !Array.isArray(ratioData)) {
+    return res.status(400).send('Invalid data format');
+  }
+
+  const queries = ratioData.map(item => {
+    const { numa, numb, ratio, step, oragina, oranginb, sector } = item;
+
+    return new Promise((resolve, reject) => {
+      const query = `
+        INSERT INTO ratio (numa, numb, ratio, step, oragina, oranginb, sector)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`;
+      
+      connection.query(query, [numa, numb, ratio, step, oragina, oranginb, sector], (error, results) => {
+        if (error) {
+          console.error('Database insert error:', error);
+          reject(error);
+        } else {
+          resolve(results);
+          console.log('Data inserted successfully:', results);
+        }
+      });
+    });
+  });
+
+  Promise.all(queries)
+    .then(results => {
+      res.status(200).json({ success: true, results });
+    })
+    .catch(error => {
+      console.error('Error inserting data:', error);
+      res.status(500).json({ success: false, error: 'Failed to insert data' });
+    });
+});
 app
   .listen(config.port, () => {
     Logger.info(`
