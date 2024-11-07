@@ -204,7 +204,69 @@ app.get("/query-points", (req, res) => {
   });
 });
 
+import { RowDataPacket } from 'mysql2';
 
+interface RatioResult extends RowDataPacket {
+  ratio_id: number;
+}
+
+app.get("/get-ratios", (req, res) => {
+  const { year, subject, grade, examType } = req.query;
+
+  // 修改查询以获取所有相关的ratio_id
+  const findRatioIdsQuery = `
+    SELECT DISTINCT p.ratio_id 
+    FROM points p
+    WHERE p.year = ? 
+    AND p.subject = ? 
+    AND p.sc_lev = ? 
+    AND p.exam_type = ? 
+    AND p.point_adj IS NOT NULL 
+    AND p.ratio_id IS NOT NULL
+    GROUP BY p.ratio_id
+    HAVING COUNT(*) > 0
+  `;
+
+  connection.query<RatioResult[]>(
+    findRatioIdsQuery, 
+    [year, subject, grade, examType], 
+    (error, ratioResults) => {
+      if (error) {
+        console.error("Error finding ratio_ids:", error);
+        return res.status(500).json({ error: "Database query error" });
+      }
+
+      if (!ratioResults || ratioResults.length === 0) {
+        return res.json([]);
+      }
+
+      // 获取所有ratio_id
+      const ratioIds = ratioResults.map(r => r.ratio_id);
+      
+      // 修改查询以获取所有相关的ratio记录
+      const getRatiosQuery = `
+        SELECT r.* 
+        FROM ratio r
+        WHERE r.ratio_id IN (?)
+        ORDER BY CASE r.sector
+          WHEN 'A' THEN 1
+          WHEN 'B' THEN 2
+          WHEN 'C' THEN 3
+          WHEN 'D' THEN 4
+          WHEN 'E' THEN 5
+        END
+      `;
+
+      connection.query(getRatiosQuery, [ratioIds], (error, ratios) => {
+        if (error) {
+          console.error("Error fetching ratios:", error);
+          return res.status(500).json({ error: "Database query error" });
+        }
+        res.json(ratios);
+      });
+    }
+  );
+});
 // Modify your existing /query-points endpoint to accept query parameters
 app.get("/query-points", (req, res) => {
   const { year, subject, grade, examType } = req.query;
