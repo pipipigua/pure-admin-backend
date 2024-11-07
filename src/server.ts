@@ -76,15 +76,15 @@ app.post('/refresh-token', refreshToken);
 
 // 添加更新角色权限的路由
 app.put("/roles/:roleId/permissions", (req, res) => {
-  console.log("------------------------");
-  console.log("收到更新角色权限请求");
-  console.log("请求 URL:", req.originalUrl);
-  console.log("请求方法:", req.method);
-  console.log("请求路径:", req.path);
-  console.log("请求参数:", req.params);
-  console.log("请求体:", req.body);
-  console.log("请求头:", req.headers);
-  console.log("------------------------");
+  // console.log("------------------------");
+  // console.log("收到更新角色权限请求");
+  // console.log("请求 URL:", req.originalUrl);
+  // console.log("请求方法:", req.method);
+  // console.log("请求路径:", req.path);
+  // console.log("请求参数:", req.params);
+  // console.log("请求体:", req.body);
+  // console.log("请求头:", req.headers);
+  // console.log("------------------------");
   updateRolePermissions(req, res);
 });
 
@@ -132,7 +132,7 @@ app.get("/api/years", (req, res) => {
   const query = "SELECT DISTINCT year FROM points";
   connection.query(query, (error, results) => {
     if (error) {
-      console.error("Database query error:", error);
+      // console.error("Database query error:", error);
       return res.status(500).send("Database query error");
     }
     // Return full results
@@ -145,7 +145,7 @@ app.get("/api/subjects", (req, res) => {
   const query = "SELECT DISTINCT subject FROM points";
   connection.query(query, (error, results) => {
     if (error) {
-      console.error("Database query error:", error);
+      // console.error("Database query error:", error);
       return res.status(500).send("Database query error");
     }
     // Return full results
@@ -158,7 +158,7 @@ app.get("/api/grades", (req, res) => {
   const query = "SELECT DISTINCT sc_lev FROM points";
   connection.query(query, (error, results) => {
     if (error) {
-      console.error("Database query error:", error);
+      // console.error("Database query error:", error);
       return res.status(500).send("Database query error");
     }
     // Return full results
@@ -171,7 +171,7 @@ app.get("/api/exam-types", (req, res) => {
   const query = "SELECT DISTINCT exam_type FROM points";
   connection.query(query, (error, results) => {
     if (error) {
-      console.error("Database query error:", error);
+      // console.error("Database query error:", error);
       return res.status(500).send("Database query error");
     }
     // Return full results
@@ -197,7 +197,7 @@ app.get("/query-points", (req, res) => {
   // Execute the query with parameterized values to prevent SQL injection
   connection.query(query, [year, subject, grade, examType], (error, results) => {
     if (error) {
-      console.error("Database query error:", error);
+      // console.error("Database query error:", error);
       return res.status(500).send("Database query error");
     }
     res.json(results);
@@ -223,7 +223,7 @@ app.get("/query-points", (req, res) => {
   // Execute the query with parameterized values to prevent SQL injection
   connection.query(query, [year, subject, grade, examType], (error, results) => {
     if (error) {
-      console.error("Database query error:", error);
+      // console.error("Database query error:", error);
       return res.status(500).send("Database query error");
     }
     res.json(results);
@@ -250,13 +250,13 @@ app.post("/update-scores", (req, res) => {
         WHERE id = ? 
       `;
       // Use parameterized queries to prevent SQL injection
-      console.log(query, point_adj, ratio_id,rank, id);
+      // console.log(query, point_adj, ratio_id,rank, id);
       connection.query(
         query,
         [point_adj, ratio_id,rank, id ],
         (error, results) => {
           if (error) {
-            console.error("Database update error:", error);
+            // console.error("Database update error:", error);
             reject(error);
           } else {
             resolve(results);
@@ -272,7 +272,7 @@ app.post("/update-scores", (req, res) => {
       res.status(200).send("Scores updated successfully");
     })
     .catch(error => {
-      console.error("Error updating scores:", error);
+      // console.error("Error updating scores:", error);
       res.status(500).send("Database update error");
     });
 });
@@ -294,11 +294,11 @@ app.post('/add-ratio', (req, res) => {
       
       connection.query(query, [numa, numb, ratio, step, oragina, oranginb, sector], (error, results) => {
         if (error) {
-          console.error('Database insert error:', error);
+          // console.error('Database insert error:', error);
           reject(error);
         } else {
           resolve(results);
-          console.log('Data inserted successfully:', results);
+          // console.log('Data inserted successfully:', results);
         }
       });
     });
@@ -309,7 +309,7 @@ app.post('/add-ratio', (req, res) => {
       res.status(200).json({ success: true, results });
     })
     .catch(error => {
-      console.error('Error inserting data:', error);
+      // console.error('Error inserting data:', error);
       res.status(500).json({ success: false, error: 'Failed to insert data' });
     });
 });
@@ -331,11 +331,11 @@ app.post('/add-ratio', (req, res) => {
       
       connection.query(query, [numa, numb, ratio, step, oragina, oranginb, sector], (error, results) => {
         if (error) {
-          console.error('Database insert error:', error);
+          // console.error('Database insert error:', error);
           reject(error);
         } else {
           resolve(results);
-          console.log('Data inserted successfully:', results);
+          // console.log('Data inserted successfully:', results);
         }
       });
     });
@@ -346,10 +346,43 @@ app.post('/add-ratio', (req, res) => {
       res.status(200).json({ success: true, results });
     })
     .catch(error => {
-      console.error('Error inserting data:', error);
+      // console.error('Error inserting data:', error);
       res.status(500).json({ success: false, error: 'Failed to insert data' });
     });
 });
+
+app.post("/enable-editing", (req, res) => {
+  const data = req.body.data;
+
+  const queries = data.map(item => {
+    return new Promise((resolve, reject) => {
+      const query = `
+        UPDATE points
+        SET button = ?
+        WHERE id = ?
+      `;
+      connection.query(query, [1, item.id], (error, results) => {
+        if (error) {
+          // console.error("Database update error:", error);
+          reject(error);
+        } else {
+          resolve(results);
+        }
+      });
+    });
+  });
+
+  Promise.all(queries)
+    .then(results => {
+      res.status(200).json({ success: true, results });
+    })
+    .catch(error => {
+      console.error("Error updating data:", error);
+      res.status(500).json({ success: false, error: "Failed to update data" });
+    });
+});
+
+
 app
   .listen(config.port, () => {
     Logger.info(`

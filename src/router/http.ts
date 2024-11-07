@@ -156,7 +156,10 @@ const login = async (req: Request, res: Response) => {
       content: `用户登录成功`,
       ip: getClientIP(req)
     });
-
+    // 在返回响应之前添加日志
+    console.log('User data:', user);
+    console.log('Roles:', user.roles);
+    console.log('Split roles:', user.roles ? user.roles.split(',') : []);
     return res.json({
       success: true,
       data: {
@@ -171,7 +174,8 @@ const login = async (req: Request, res: Response) => {
         position: user.position,
         mobile: user.mobile,
         email: user.email,
-        avatar: user.avatar
+        avatar: user.avatar,
+        permissions: user.permissions ? user.permissions.split(',') : [], // 添加这行
       }
     });
   });
@@ -819,6 +823,51 @@ const getRoleList = async (req: Request, res: Response) => {
     });
   }
 };
+
+interface PermissionRow {
+  code: string;
+}
+
+const getUserPermissions = async (req: Request, res: Response) => {
+  try {
+    const authorizationHeader = req.get("Authorization");
+    const accessToken = authorizationHeader?.replace("Bearer ", "");
+    const decoded = jwt.verify(accessToken, secret.jwtSecret) as { username: string };
+    
+    const sql = `
+      SELECT DISTINCT p.code
+      FROM permissions p
+      JOIN role_permissions rp ON p.id = rp.permission_id
+      JOIN user_roles ur ON rp.role_id = ur.role_id
+      JOIN users u ON ur.user_id = u.id
+      WHERE u.username = ? AND p.status = 1
+    `;
+    
+    connection.query<PermissionRow[]>(sql, [decoded.username], (err, results) => {
+      if (err) {
+        Logger.error('获取用户权限失败:', err);
+        return res.json({
+          success: false,
+          message: "获取权限失败"
+        });
+      }
+
+      const permissions = results.map(row => row.code);
+      res.json({
+        success: true,
+        data: {
+          permissions
+        }
+      });
+    });
+  } catch (error) {
+    console.error('获取用户权限失败:', error);
+    res.status(401).json({
+      success: false,
+      message: "未授权"
+    });
+  }
+};
 /**
  * @typedef SearchPage
  * @property {integer} page.required - 第几页 - eg: 1
@@ -1124,7 +1173,7 @@ const getAsyncRoutes = async (req: Request, res: Response) => {
   }
 };
 export {
-  captcha, deleteList, getAsyncRoutes, getRoleList, getUserList, login, refreshToken, register, searchPage,
+  captcha, deleteList, getAsyncRoutes, getRoleList, getUserList, getUserPermissions, login, refreshToken, register, searchPage,
   searchVague, updateList, updateRolePermissions, upload
 };
 
