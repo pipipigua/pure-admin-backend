@@ -6,7 +6,14 @@ import config from "./config";
 import Logger from "./loaders/logger";
 // import { operationLogs, role, user, userRole } from "./models/mysql";
 import { importUsersFromLocalExcel } from "./router/excel";
-import { getAsyncRoutes, getRoleList, getUserList, refreshToken, updateRolePermissions } from "./router/http";
+import {
+  getAsyncRoutes,
+  getRoleList,
+  getUserList,
+  importNormalScores,
+  refreshToken,
+  updateRolePermissions,
+} from "./router/http";
 import { connection } from "./utils/mysql";
 
 // import { queryTable } from "./utils/mysql";
@@ -71,8 +78,7 @@ app.get("/roles", (req, res) => {
   // console.log("------------------------");
   getRoleList(req, res);
 });
-app.post('/refresh-token', refreshToken);
-
+app.post("/refresh-token", refreshToken);
 
 // 添加更新角色权限的路由
 app.put("/roles/:roleId/permissions", (req, res) => {
@@ -97,7 +103,6 @@ app.post("/upload", upload_tmp.any(), (req, res) => {
 app.post("/api/excel/import-local", (req, res) => {
   importUsersFromLocalExcel(req, res);
 });
-
 
 app.get("/captcha", (req, res) => {
   captcha(req, res);
@@ -140,71 +145,68 @@ app.get("/api/years", (req, res) => {
   });
 });
 
-// Endpoint to get distinct subjects
+// 修改获取科目的API - 添加年份筛选
 app.get("/api/subjects", (req, res) => {
-  const query = "SELECT DISTINCT subject FROM points";
-  connection.query(query, (error, results) => {
-    if (error) {
-      // console.error("Database query error:", error);
-      return res.status(500).send("Database query error");
-    }
-    // Return full results
-    res.json(results);
-  });
-});
+  const { year } = req.query;
 
-// Endpoint to get distinct grades
-app.get("/api/grades", (req, res) => {
-  const query = "SELECT DISTINCT sc_lev FROM points";
-  connection.query(query, (error, results) => {
-    if (error) {
-      // console.error("Database query error:", error);
-      return res.status(500).send("Database query error");
-    }
-    // Return full results
-    res.json(results);
-  });
-});
-
-// Endpoint to get distinct exam types
-app.get("/api/exam-types", (req, res) => {
-  const query = "SELECT DISTINCT exam_type FROM points";
-  connection.query(query, (error, results) => {
-    if (error) {
-      // console.error("Database query error:", error);
-      return res.status(500).send("Database query error");
-    }
-    // Return full results
-    res.json(results);
-  });
-});
-
-// Modify your existing /query-points endpoint to accept query parameters
-app.get("/query-points", (req, res) => {
-  const { year, subject, grade, examType } = req.query;
-
-  // Check if all parameters are provided
-  if (!year || !subject || !grade || !examType) {
-    return res.status(400).send("Missing query parameters");
+  if (!year) {
+    return res.status(400).send("Year parameter is required");
   }
 
-  // Build the query with the provided parameters
-  const query = `
-    SELECT * FROM points
-    WHERE year = ? AND subject = ? AND sc_lev = ? AND exam_type = ?
-  `;
-
-  // Execute the query with parameterized values to prevent SQL injection
-  connection.query(query, [year, subject, grade, examType], (error, results) => {
+  const query = "SELECT DISTINCT subject FROM points WHERE year = ?";
+  connection.query(query, [year], (error, results) => {
     if (error) {
-      // console.error("Database query error:", error);
       return res.status(500).send("Database query error");
     }
     res.json(results);
   });
 });
 
-import { RowDataPacket } from 'mysql2';
+// 修改获取年级的API - 添加年份和科目筛选
+app.get("/api/grades", (req, res) => {
+  const { year, subject } = req.query;
+
+  if (!year || !subject) {
+    return res.status(400).send("Year and subject parameters are required");
+  }
+
+  const query =
+    "SELECT DISTINCT sc_lev FROM points WHERE year = ? AND subject = ?";
+  connection.query(query, [year, subject], (error, results) => {
+    if (error) {
+      return res.status(500).send("Database query error");
+    }
+    res.json(results);
+  });
+});
+
+// 修改获取考试类型的API - 添加年份、科目和年级筛选
+app.get("/api/exam-types", (req, res) => {
+  const { year, subject, grade } = req.query;
+
+  if (!year || !subject || !grade) {
+    return res
+      .status(400)
+      .send("Year, subject and grade parameters are required");
+  }
+
+  const query = `
+    SELECT DISTINCT exam_type 
+    FROM points 
+    WHERE year = ? 
+    AND subject = ? 
+    AND sc_lev = ?
+  `;
+
+  connection.query(query, [year, subject, grade], (error, results) => {
+    if (error) {
+      return res.status(500).send("Database query error");
+    }
+    res.json(results);
+  });
+});
+
+import { RowDataPacket } from "mysql2";
 
 interface RatioResult extends RowDataPacket {
   ratio_id: number;
@@ -228,8 +230,8 @@ app.get("/get-ratios", (req, res) => {
   `;
 
   connection.query<RatioResult[]>(
-    findRatioIdsQuery, 
-    [year, subject, grade, examType], 
+    findRatioIdsQuery,
+    [year, subject, grade, examType],
     (error, ratioResults) => {
       if (error) {
         console.error("Error finding ratio_ids:", error);
@@ -241,8 +243,8 @@ app.get("/get-ratios", (req, res) => {
       }
 
       // 获取所有ratio_id
-      const ratioIds = ratioResults.map(r => r.ratio_id);
-      
+      const ratioIds = ratioResults.map((r) => r.ratio_id);
+
       // 修改查询以获取所有相关的ratio记录
       const getRatiosQuery = `
         SELECT r.* 
@@ -270,12 +272,10 @@ app.get("/get-ratios", (req, res) => {
 // Modify your existing /query-points endpoint to accept query parameters
 app.get("/query-points", (req, res) => {
   const { year, subject, grade, examType } = req.query;
-
   // Check if all parameters are provided
   if (!year || !subject || !grade || !examType) {
     return res.status(400).send("Missing query parameters");
   }
-
   // Build the query with the provided parameters
   const query = `
     SELECT * FROM points
@@ -283,13 +283,17 @@ app.get("/query-points", (req, res) => {
   `;
 
   // Execute the query with parameterized values to prevent SQL injection
-  connection.query(query, [year, subject, grade, examType], (error, results) => {
-    if (error) {
-      // console.error("Database query error:", error);
-      return res.status(500).send("Database query error");
+  connection.query(
+    query,
+    [year, subject, grade, examType],
+    (error, results) => {
+      if (error) {
+        // console.error("Database query error:", error);
+        return res.status(500).send("Database query error");
+      }
+      res.json(results);
     }
-    res.json(results);
-  });
+  );
 });
 
 // index.js (or your server file)
@@ -302,23 +306,21 @@ app.post("/update-scores", (req, res) => {
   }
 
   // Construct promises for batch updates
-  const queries = students.map(student => {
-    const { point_adj, ratio_id,rank, id } = student;
+  const queries = students.map((student) => {
+    const { point_adj, ratio_id, rank, segment, s_rank, id } = student;
 
     return new Promise((resolve, reject) => {
       const query = `
         UPDATE points
-        SET point_adj = ?, button = 0 ,ratio_id = ?, rank = ?
+        SET point_adj = ?, button = 0 ,ratio_id = ?, rank = ?, segment = ?,
+            s_rank = ?
         WHERE id = ? 
       `;
-      // Use parameterized queries to prevent SQL injection
-      // console.log(query, point_adj, ratio_id,rank, id);
       connection.query(
         query,
-        [point_adj, ratio_id,rank, id ],
+        [point_adj, ratio_id, rank, segment, s_rank, id],
         (error, results) => {
           if (error) {
-            // console.error("Database update error:", error);
             reject(error);
           } else {
             resolve(results);
@@ -333,90 +335,125 @@ app.post("/update-scores", (req, res) => {
     .then(() => {
       res.status(200).send("Scores updated successfully");
     })
-    .catch(error => {
+    .catch((error) => {
       // console.error("Error updating scores:", error);
       res.status(500).send("Database update error");
     });
 });
-
-app.post('/add-ratio', (req, res) => {
+app.post("/add-ratio", (req, res) => {
   const ratioData = req.body.data;
 
   if (!ratioData || !Array.isArray(ratioData)) {
-    return res.status(400).send('Invalid data format');
+    return res.status(400).send("Invalid data format");
   }
 
-  const queries = ratioData.map(item => {
+  const queries = ratioData.map((item) => {
     const { numa, numb, ratio, step, oragina, oranginb, sector } = item;
 
     return new Promise((resolve, reject) => {
       const query = `
         INSERT INTO ratio (numa, numb, ratio, step, oragina, oranginb, sector)
         VALUES (?, ?, ?, ?, ?, ?, ?)`;
-      
-      connection.query(query, [numa, numb, ratio, step, oragina, oranginb, sector], (error, results) => {
-        if (error) {
-          // console.error('Database insert error:', error);
-          reject(error);
-        } else {
-          resolve(results);
-          // console.log('Data inserted successfully:', results);
+
+      connection.query(
+        query,
+        [numa, numb, ratio, step, oragina, oranginb, sector],
+        (error, results) => {
+          if (error) {
+            // console.error('Database insert error:', error);
+            reject(error);
+          } else {
+            resolve(results);
+            // console.log('Data inserted successfully:', results);
+          }
         }
-      });
+      );
     });
   });
 
   Promise.all(queries)
-    .then(results => {
+    .then((results) => {
       res.status(200).json({ success: true, results });
     })
-    .catch(error => {
+    .catch((error) => {
       // console.error('Error inserting data:', error);
-      res.status(500).json({ success: false, error: 'Failed to insert data' });
+      res.status(500).json({ success: false, error: "Failed to insert data" });
     });
 });
 
-app.post('/add-ratio', (req, res) => {
-  const ratioData = req.body.data;
+// 添加导入成绩的路由
+app.post("/api/import-scores", (req, res) => {
+  const scores = req.body;
 
-  if (!ratioData || !Array.isArray(ratioData)) {
-    return res.status(400).send('Invalid data format');
+  if (!Array.isArray(scores) || scores.length === 0) {
+    return res.status(400).send("Invalid data format");
   }
 
-  const queries = ratioData.map(item => {
-    const { numa, numb, ratio, step, oragina, oranginb, sector } = item;
+  // 过滤掉无效数据
+  const validScores = scores.filter((score) => {
+    const point = parseFloat(score.point);
+    const stnum = parseInt(score.stnum); // B列
+    const sc_num = parseInt(score.sc_num); // C列
+    return (
+      !isNaN(point) &&
+      !isNaN(stnum) &&
+      !isNaN(sc_num) &&
+      score.point !== null &&
+      score.point !== ""
+    );
+  });
 
+  const queries = validScores.map((score) => {
     return new Promise((resolve, reject) => {
       const query = `
-        INSERT INTO ratio (numa, numb, ratio, step, oragina, oranginb, sector)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`;
-      
-      connection.query(query, [numa, numb, ratio, step, oragina, oranginb, sector], (error, results) => {
+        INSERT INTO points 
+        (year, exam_type, subject, point, sc_lev, sc_class, sc_num, sc_name, button, stnum)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      `;
+
+      const values = [
+        parseInt(score.year),
+        score.exam_type,
+        score.subject,
+        parseFloat(score.point),
+        score.sc_lev,
+        score.sc_class,
+        score.sc_num, // C列
+        score.sc_name,
+        parseInt(score.stnum), // B列作为stnum
+      ];
+
+      connection.query(query, values, (error, results) => {
         if (error) {
-          // console.error('Database insert error:', error);
+          console.error("Database error:", error);
           reject(error);
         } else {
           resolve(results);
-          // console.log('Data inserted successfully:', results);
         }
       });
     });
   });
 
   Promise.all(queries)
-    .then(results => {
-      res.status(200).json({ success: true, results });
+    .then(() => {
+      res.status(200).json({
+        success: true,
+        message: `Successfully imported ${validScores.length} scores`,
+      });
     })
-    .catch(error => {
-      // console.error('Error inserting data:', error);
-      res.status(500).json({ success: false, error: 'Failed to insert data' });
+    .catch((error) => {
+      console.error("Import error:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
     });
 });
 
 app.post("/enable-editing", (req, res) => {
   const data = req.body.data;
 
-  const queries = data.map(item => {
+  const queries = data.map((item) => {
     return new Promise((resolve, reject) => {
       const query = `
         UPDATE points
@@ -435,16 +472,106 @@ app.post("/enable-editing", (req, res) => {
   });
 
   Promise.all(queries)
-    .then(results => {
+    .then((results) => {
       res.status(200).json({ success: true, results });
     })
-    .catch(error => {
+    .catch((error) => {
       console.error("Error updating data:", error);
       res.status(500).json({ success: false, error: "Failed to update data" });
     });
 });
 
+// 为总分页面添加新的年级获取API
+app.get("/api/total/grades", (req, res) => {
+  const { year } = req.query;
 
+  if (!year) {
+    return res.status(400).send("Year parameter is required");
+  }
+
+  const query = "SELECT DISTINCT sc_lev FROM points WHERE year = ?";
+  connection.query(query, [year], (error, results) => {
+    if (error) {
+      return res.status(500).send("Database query error");
+    }
+    res.json(results);
+  });
+});
+
+app.get("/api/total/exam-types", (req, res) => {
+  const { year, grade } = req.query;
+
+  if (!year || !grade) {
+    return res.status(400).send("Year and grade parameters are required");
+  }
+
+  const query = `
+    SELECT DISTINCT LEFT(exam_type, 5) as exam_type 
+    FROM points 
+    WHERE year = ? 
+    AND sc_lev = ?
+  `;
+
+  connection.query(query, [year, grade], (error, results) => {
+    if (error) {
+      return res.status(500).send("Database query error");
+    }
+    res.json(results);
+  });
+});
+
+app.get("/api/total-scores", (req, res) => {
+  const { year, grade, examType } = req.query;
+  // console.log("收到总分查询请求:", { year, grade, examType });
+
+  if (!year || !grade || !examType) {
+    return res.status(400).json({
+      success: false,
+      message: "缺少必要的查询参数",
+    });
+  }
+
+  const query = `
+    SELECT
+      p.year,
+      p.stnum,
+      p.sc_name,
+      p.sc_lev,
+      p.sc_class,
+      p.sc_num,
+      p.exam_type,
+      p.subject,
+      p.point_adj,
+      p.segment
+    FROM points p
+    WHERE p.year = ?
+    AND p.sc_lev = ?
+    AND p.exam_type LIKE CONCAT(?, '%')
+  `;
+
+  const searchPattern = `${examType}%`;
+  // console.log("执行SQL查询:", query);
+  // console.log("查询参数:", [year, grade, searchPattern]);
+
+  connection.query(query, [year, grade, searchPattern], (error, results) => {
+    if (error) {
+      console.error("Database query error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "数据库查询错误",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: results,
+    });
+  });
+});
+
+app.post("/api/import-normal-points", (req, res) => {
+  importNormalScores(req, res);
+});
 app
   .listen(config.port, () => {
     Logger.info(`

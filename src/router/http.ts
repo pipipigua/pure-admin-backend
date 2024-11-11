@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import * as fs from "fs";
 import * as jwt from "jsonwebtoken";
 import * as mysql from "mysql2";
-import { RowDataPacket } from 'mysql2';
+import { RowDataPacket } from "mysql2";
 import { createMathExpr } from "svg-captcha";
 import secret from "../config";
 import Logger from "../loaders/logger";
@@ -17,7 +17,7 @@ const utils = require("@pureadmin/utils");
 let generateVerify: number;
 
 /** 过期时间 单位：毫秒 默认 1分钟过期，方便演示 */
-let expiresIn = 2 * 60 * 60 * 1000; 
+let expiresIn = 2 * 60 * 60 * 1000;
 /**
  * @typedef Error
  * @property {string} code.required
@@ -57,8 +57,8 @@ let expiresIn = 2 * 60 * 60 * 1000;
 
 const login = async (req: Request, res: Response) => {
   const { username, password } = req.body;
-  
-  console.log('Login attempt:', { username }); // 不要打印密码
+
+  console.log("Login attempt:", { username }); // 不要打印密码
 
   // 先查询用户是否存在
   const sql = `
@@ -72,13 +72,13 @@ const login = async (req: Request, res: Response) => {
     WHERE u.username = ?
     GROUP BY u.id
   `;
-  
+
   connection.query(sql, [username], async function (err, data: any) {
     if (err) {
       Logger.error(err);
       return res.json({
         success: false,
-        data: { message: "系统错误" }
+        data: { message: "系统错误" },
       });
     }
 
@@ -90,17 +90,17 @@ const login = async (req: Request, res: Response) => {
         action: OperationType.LOGIN,
         module: ModuleType.AUTH,
         content: `用户登录失败：用户不存在`,
-        ip: getClientIP(req)
+        ip: getClientIP(req),
       });
 
       return res.json({
         success: false,
-        data: { message: Message[1] }  // 用户不存在
+        data: { message: Message[1] }, // 用户不存在
       });
     }
 
     const user = data[0];
-    
+
     // 验证密码
     const hashedPassword = createHash("md5").update(password).digest("hex");
     if (hashedPassword !== user.password) {
@@ -110,12 +110,12 @@ const login = async (req: Request, res: Response) => {
         action: OperationType.LOGIN,
         module: ModuleType.AUTH,
         content: `用户登录失败：密码错误`,
-        ip: getClientIP(req)
+        ip: getClientIP(req),
       });
-      
+
       return res.json({
         success: false,
-        data: { message: "密码错误" }
+        data: { message: "密码错误" },
       });
     }
 
@@ -127,12 +127,12 @@ const login = async (req: Request, res: Response) => {
         action: OperationType.LOGIN,
         module: ModuleType.AUTH,
         content: `用户登录失败：账号已禁用`,
-        ip: getClientIP(req)
+        ip: getClientIP(req),
       });
-      
+
       return res.json({
         success: false,
-        data: { message: "账号已禁用" }
+        data: { message: "账号已禁用" },
       });
     }
 
@@ -141,7 +141,7 @@ const login = async (req: Request, res: Response) => {
       {
         id: user.id,
         username: user.username,
-        name: user.name 
+        name: user.name,
       },
       secret.jwtSecret,
       { expiresIn }
@@ -154,19 +154,19 @@ const login = async (req: Request, res: Response) => {
       action: OperationType.LOGIN,
       module: ModuleType.AUTH,
       content: `用户登录成功`,
-      ip: getClientIP(req)
+      ip: getClientIP(req),
     });
     // 在返回响应之前添加日志
-    console.log('User data:', user);
-    console.log('Roles:', user.roles);
-    console.log('Split roles:', user.roles ? user.roles.split(',') : []);
+    console.log("User data:", user);
+    console.log("Roles:", user.roles);
+    console.log("Split roles:", user.roles ? user.roles.split(",") : []);
     return res.json({
       success: true,
       data: {
         message: Message[2],
         username: user.name,
         userid: user.userid,
-        roles: user.roles ? user.roles.split(',') : [],
+        roles: user.roles ? user.roles.split(",") : [],
         accessToken,
         refreshToken: "eyJhbGciOiJIUzUxMiJ9.adminRefresh",
         expires: new Date(new Date()).getTime() + expiresIn,
@@ -175,19 +175,19 @@ const login = async (req: Request, res: Response) => {
         mobile: user.mobile,
         email: user.email,
         avatar: user.avatar,
-        permissions: user.permissions ? user.permissions.split(',') : [], // 添加这行
-      }
+        permissions: user.permissions ? user.permissions.split(",") : [], // 添加这行
+      },
     });
   });
 };
 // 刷新 token
 const refreshToken = async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
-  
+
   try {
     // 验证 refresh token
     const decoded = jwt.verify(refreshToken, secret.jwtSecret) as any;
-    
+
     // 查询用户是否还有效
     const sql = `
       SELECT u.*, GROUP_CONCAT(DISTINCT r.code) as roles
@@ -197,26 +197,26 @@ const refreshToken = async (req: Request, res: Response) => {
       WHERE u.id = ? AND u.status = 1
       GROUP BY u.id
     `;
-    
+
     connection.query(sql, [decoded.id], async function (err, data: any) {
       if (err || data.length === 0) {
         return res.json({
           success: false,
-          data: { message: "用户不存在或已禁用" }
+          data: { message: "用户不存在或已禁用" },
         });
       }
 
       const user = data[0];
-      
+
       // 生成新的 access token
       const accessToken = jwt.sign(
         {
           id: user.id,
           username: user.username,
-          name: user.name
+          name: user.name,
         },
         secret.jwtSecret,
-        { expiresIn: '2h' }  // token 有效期2小时
+        { expiresIn: "2h" } // token 有效期2小时
       );
 
       return res.json({
@@ -224,15 +224,15 @@ const refreshToken = async (req: Request, res: Response) => {
         data: {
           accessToken,
           refreshToken: accessToken, // 为简单起见，使用相同的 token
-          expires: new Date().getTime() + (2 * 60 * 60 * 1000) // 2小时后过期
-        }
+          expires: new Date().getTime() + 2 * 60 * 60 * 1000, // 2小时后过期
+        },
       });
     });
   } catch (error) {
-    Logger.error('刷新token错误:', error);
+    Logger.error("刷新token错误:", error);
     return res.json({
       success: false,
-      data: { message: "refresh token 无效" }
+      data: { message: "refresh token 无效" },
     });
   }
 };
@@ -263,39 +263,39 @@ const refreshToken = async (req: Request, res: Response) => {
  */
 const register = async (req: Request, res: Response) => {
   const { username, password, name } = req.body;
-  const DEFAULT_ROLE_ID = 2;  // 设置默认角色 ID 为 2
+  const DEFAULT_ROLE_ID = 2; // 设置默认角色 ID 为 2
 
   try {
     // 检查用户名是否已存在
     const checkSql = "SELECT id FROM users WHERE username = ?";
-    connection.query(checkSql, [username], async function(err, result: any) {
+    connection.query(checkSql, [username], async function (err, result: any) {
       if (err) {
         Logger.error(err);
         return res.json({
           success: false,
-          data: { message: "系统错误" }
+          data: { message: "系统错误" },
         });
       }
 
       if (result.length > 0) {
         return res.json({
           success: false,
-          data: { message: Message[5] }  // 用户名已存在
+          data: { message: Message[5] }, // 用户名已存在
         });
       }
 
       // 开始事务
-      connection.beginTransaction(async function(err) {
+      connection.beginTransaction(async function (err) {
         if (err) {
           Logger.error(err);
           return res.json({
             success: false,
-            data: { message: "注册失败" }
+            data: { message: "注册失败" },
           });
         }
 
         const hashedPassword = createHash("md5").update(password).digest("hex");
-        
+
         // 插入用户基本信息
         const insertSql = `
           INSERT INTO users (
@@ -305,68 +305,77 @@ const register = async (req: Request, res: Response) => {
           ) VALUES (?, ?, ?, 1, ?, ?, ?, NOW(), NOW())
         `;
 
-        connection.query(insertSql, [username, hashedPassword, name], function(err, result: any) {
-          if (err) {
-            return connection.rollback(function() {
-              Logger.error(err);
-              res.json({
-                success: false,
-                data: { message: "注册失败" }
-              });
-            });
-          }
-
-          const userId = result.insertId;
-
-          // 为新用户分配默认角色
-          const insertRoleSql = "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)";
-          connection.query(insertRoleSql, [userId, DEFAULT_ROLE_ID], function(err) {
+        connection.query(
+          insertSql,
+          [username, hashedPassword, name],
+          function (err, result: any) {
             if (err) {
-              return connection.rollback(function() {
+              return connection.rollback(function () {
                 Logger.error(err);
                 res.json({
                   success: false,
-                  data: { message: "分配角色失败" }
+                  data: { message: "注册失败" },
                 });
               });
             }
 
-            // 提交事务
-            connection.commit(function(err) {
-              if (err) {
-                return connection.rollback(function() {
-                  Logger.error(err);
+            const userId = result.insertId;
+
+            // 为新用户分配默认角色
+            const insertRoleSql =
+              "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)";
+            connection.query(
+              insertRoleSql,
+              [userId, DEFAULT_ROLE_ID],
+              function (err) {
+                if (err) {
+                  return connection.rollback(function () {
+                    Logger.error(err);
+                    res.json({
+                      success: false,
+                      data: { message: "分配角色失败" },
+                    });
+                  });
+                }
+
+                // 提交事务
+                connection.commit(function (err) {
+                  if (err) {
+                    return connection.rollback(function () {
+                      Logger.error(err);
+                      res.json({
+                        success: false,
+                        data: { message: "注册失败" },
+                      });
+                    });
+                  }
+
+                  // 记录注册操作日志
+                  logOperation({
+                    operatorId: userId,
+                    operatorName: username,
+                    action: OperationType.CREATE,
+                    module: ModuleType.AUTH,
+                    content: `新用户注册：${username}`,
+                    ip: getClientIP(req),
+                  });
+
                   res.json({
-                    success: false,
-                    data: { message: "注册失败" }
+                    success: true,
+                    data: { message: Message[6] }, // 注册成功
                   });
                 });
               }
-
-              // 记录注册操作日志
-              logOperation({
-                operatorId: userId,
-                operatorName: username,
-                action: OperationType.CREATE,
-                module: ModuleType.AUTH,
-                content: `新用户注册：${username}`,
-                ip: getClientIP(req)
-              });
-
-              res.json({
-                success: true,
-                data: { message: Message[6] }  // 注册成功
-              });
-            });
-          });
-        });
+            );
+          }
+        );
       });
     });
   } catch (error) {
     Logger.error(error);
     return res.json({
       success: false,
-      data: { message: "注册失败" }
+      data: { message: "注册失败" },
     });
   }
 };
@@ -379,7 +388,7 @@ const getUserList = async (req: Request, res: Response) => {
     if (!authHeader) {
       return res.status(401).json({
         success: false,
-        data: { message: "未登录" }
+        data: { message: "未登录" },
       });
     }
 
@@ -401,30 +410,29 @@ const getUserList = async (req: Request, res: Response) => {
         // Logger.error('查询用户列表错误:', err);
         return res.json({
           success: false,
-          data: { message: "获取用户列表失败" }
+          data: { message: "获取用户列表失败" },
         });
       }
 
       // console.log('查询到的用户数据:', data);  // 添加日志看看查询结果
 
-      const users = data.map(user => ({
+      const users = data.map((user) => ({
         ...user,
-        roles: user.roles ? user.roles.split(',') : []
+        roles: user.roles ? user.roles.split(",") : [],
       }));
 
       res.json({
         success: true,
         data: {
-          users
-        }
+          users,
+        },
       });
     });
-
   } catch (error) {
     // console.error('获取用户列表错误:', error);
     return res.status(401).json({
       success: false,
-      data: { message: "获取用户列表失败" }
+      data: { message: "获取用户列表失败" },
     });
   }
 };
@@ -446,8 +454,8 @@ const getUserList = async (req: Request, res: Response) => {
 
 const updateList = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const userData = req.body;  // 获取所有更新字段
-  
+  const userData = req.body; // 获取所有更新字段
+
   try {
     // 验证 token
     const authorizationHeader = req.get("Authorization") as string;
@@ -457,9 +465,6 @@ const updateList = async (req: Request, res: Response) => {
     // 构建更新字段
     const updateFields = [];
     const updateValues = [];
-
-
-
 
     // 检查并添加每个可更新字段
     if (userData.username) {
@@ -512,36 +517,36 @@ const updateList = async (req: Request, res: Response) => {
       WHERE id = ?
     `;
 
-    connection.query(updateSql, updateValues, async function(err) {
+    connection.query(updateSql, updateValues, async function (err) {
       if (err) {
         Logger.error(err);
         return res.json({
           success: false,
-          data: { message: "更新用户失败" }
+          data: { message: "更新用户失败" },
         });
       }
       const operator = getOperator(req);
       // 记录操作日志
       logOperation({
-        operatorId: operator.id,          // 使用 decoded 而不是 operator
-        operatorName: operator.name,      // 使用 decoded 而不是 operator
-        targetId: Number(id),            // 被更新用户的ID
-        targetType: 'user',              // 被操作对象类型
-        action: OperationType.UPDATE,    // 操作类型
-        module: ModuleType.USER,         // 模块
-        content: `更新用户信息：${JSON.stringify(userData)}`,  // 操作内容
-        ip: getClientIP(req)
+        operatorId: operator.id, // 使用 decoded 而不是 operator
+        operatorName: operator.name, // 使用 decoded 而不是 operator
+        targetId: Number(id), // 被更新用户的ID
+        targetType: "user", // 被操作对象类型
+        action: OperationType.UPDATE, // 操作类型
+        module: ModuleType.USER, // 模块
+        content: `更新用户信息：${JSON.stringify(userData)}`, // 操作内容
+        ip: getClientIP(req),
       });
       // 如果有角色信息，更新用户角色和权限
       if (userData.roles && userData.roles.length > 0) {
         // 先删除原有角色
         const deleteRolesSql = "DELETE FROM user_roles WHERE user_id = ?";
-        connection.query(deleteRolesSql, [id], async function(err) {
+        connection.query(deleteRolesSql, [id], async function (err) {
           if (err) {
             Logger.error(err);
             return res.json({
               success: false,
-              data: { message: "更新用户角色失败" }
+              data: { message: "更新用户角色失败" },
             });
           }
 
@@ -550,26 +555,30 @@ const updateList = async (req: Request, res: Response) => {
             INSERT INTO user_roles (user_id, role_id)
             SELECT ?, id FROM roles WHERE code IN (?)
           `;
-          
-          connection.query(insertRolesSql, [id, userData.roles], function(err) {
-            if (err) {
-              Logger.error(err);
-              return res.json({
-                success: false,
-                data: { message: "更新用户角色失败" }
+
+          connection.query(
+            insertRolesSql,
+            [id, userData.roles],
+            function (err) {
+              if (err) {
+                Logger.error(err);
+                return res.json({
+                  success: false,
+                  data: { message: "更新用户角色失败" },
+                });
+              }
+
+              res.json({
+                success: true,
+                data: { message: Message[7] },
               });
             }
-            
-            res.json({
-              success: true,
-              data: { message: Message[7] }
-            });
-          });
+          );
         });
       } else {
         res.json({
           success: true,
-          data: { message: Message[7] }
+          data: { message: Message[7] },
         });
       }
     });
@@ -577,7 +586,7 @@ const updateList = async (req: Request, res: Response) => {
     Logger.error(error);
     return res.status(401).json({
       success: false,
-      data: { message: "未授权" }
+      data: { message: "未授权" },
     });
   }
 };
@@ -599,7 +608,7 @@ const updateList = async (req: Request, res: Response) => {
 
 const deleteList = async (req: Request, res: Response) => {
   const { id } = req.params;
-  
+
   try {
     // 验证 token
     const authorizationHeader = req.get("Authorization") as string;
@@ -607,50 +616,50 @@ const deleteList = async (req: Request, res: Response) => {
     const payload = jwt.verify(accessToken, secret.jwtSecret);
 
     // 开始事务
-    connection.beginTransaction(function(err) {
+    connection.beginTransaction(function (err) {
       if (err) {
         Logger.error(err);
         return res.json({
           success: false,
-          data: { message: "删除失败" }
+          data: { message: "删除失败" },
         });
       }
 
       // 先删除用户角色关联
       const deleteRolesSql = "DELETE FROM user_roles WHERE user_id = ?";
-      connection.query(deleteRolesSql, [id], function(err) {
+      connection.query(deleteRolesSql, [id], function (err) {
         if (err) {
-          return connection.rollback(function() {
+          return connection.rollback(function () {
             Logger.error(err);
             res.json({
               success: false,
-              data: { message: "删除用户角色失败" }
+              data: { message: "删除用户角色失败" },
             });
           });
         }
 
         // 删除用户
         const deleteUserSql = "DELETE FROM users WHERE id = ?";
-        connection.query(deleteUserSql, [id], function(err) {
+        connection.query(deleteUserSql, [id], function (err) {
           if (err) {
-            return connection.rollback(function() {
+            return connection.rollback(function () {
               Logger.error(err);
               res.json({
                 success: false,
-                data: { message: "删除用户失败" }
+                data: { message: "删除用户失败" },
               });
             });
           }
           // 记录删除操作日志
 
           // 提交事务
-          connection.commit(function(err) {
+          connection.commit(function (err) {
             if (err) {
-              return connection.rollback(function() {
+              return connection.rollback(function () {
                 Logger.error(err);
                 res.json({
                   success: false,
-                  data: { message: "删除失败" }
+                  data: { message: "删除失败" },
                 });
               });
             }
@@ -659,18 +668,17 @@ const deleteList = async (req: Request, res: Response) => {
               operatorId: operator.id,
               operatorName: operator.name,
               targetId: Number(id),
-              targetType: 'user',
+              targetType: "user",
               action: OperationType.DELETE,
               module: ModuleType.USER,
               content: `删除用户：${id}`,
-              ip: getClientIP(req)
+              ip: getClientIP(req),
             });
             res.json({
               success: true,
-              data: { message: Message[8] }
+              data: { message: Message[8] },
             });
           });
-
         });
       });
     });
@@ -678,7 +686,7 @@ const deleteList = async (req: Request, res: Response) => {
     Logger.error(error);
     return res.status(401).json({
       success: false,
-      data: { message: "未授权" }
+      data: { message: "未授权" },
     });
   }
 };
@@ -739,12 +747,12 @@ const getRoleList = async (req: Request, res: Response) => {
       ORDER BY id ASC
     `;
 
-    connection.query<RoleRow[]>(rolesSql, async function(err, roles) {
+    connection.query<RoleRow[]>(rolesSql, async function (err, roles) {
       if (err) {
-        console.error('获取角色列表失败:', err);
+        console.error("获取角色列表失败:", err);
         return res.json({
           success: false,
-          data: { message: "获取角色列表失败" }
+          data: { message: "获取角色列表失败" },
         });
       }
 
@@ -755,71 +763,79 @@ const getRoleList = async (req: Request, res: Response) => {
         WHERE status = 1
         ORDER BY id ASC
       `;
-      connection.query<PermissionTree[]>(permissionsSql, async (err, permissions) => {
-        if (err) {
-          console.error('获取权限列表失败:', err);
-          return res.json({
-            success: false,
-            data: { message: "获取权限列表失败" }
-          });
-        }
-        try {
-          // 3. 获取每个角色的权限
-          const rolesWithPermissions = await Promise.all(roles.map(async (role) => {
-              const rolePremsSql = `
+      connection.query<PermissionTree[]>(
+        permissionsSql,
+        async (err, permissions) => {
+          if (err) {
+            console.error("获取权限列表失败:", err);
+            return res.json({
+              success: false,
+              data: { message: "获取权限列表失败" },
+            });
+          }
+          try {
+            // 3. 获取每个角色的权限
+            const rolesWithPermissions = await Promise.all(
+              roles.map(async (role) => {
+                const rolePremsSql = `
                 SELECT p.code
                 FROM permissions p
                 INNER JOIN role_permissions rp ON p.id = rp.permission_id
                 WHERE rp.role_id = ? AND p.status = 1
               `;
-            return new Promise<RoleWithPermissions>((resolve, reject) => {
-              connection.query<PermissionRow[]>(
-                rolePremsSql,
-                [role.id],
-                (err, perms) => {
-                  if (err) {
-                    reject(err);
-                    return;
-                  }
-                  resolve({
-                    ...role,
-                    permissions: perms.map(p => p.code)
-                  });
-                }
-              );
+                return new Promise<RoleWithPermissions>((resolve, reject) => {
+                  connection.query<PermissionRow[]>(
+                    rolePremsSql,
+                    [role.id],
+                    (err, perms) => {
+                      if (err) {
+                        reject(err);
+                        return;
+                      }
+                      resolve({
+                        ...role,
+                        permissions: perms.map((p) => p.code),
+                      });
+                    }
+                  );
+                });
+              })
+            );
+            // 4. 构建权限树
+            const buildTree = (
+              items: PermissionTree[],
+              parentId: number | null = null
+            ): PermissionTree[] => {
+              return items
+                .filter((item) => item.parent_id === parentId)
+                .map((item) => ({
+                  ...item,
+                  children: buildTree(items, item.id),
+                }));
+            };
+            // 5. 返回结果
+            return res.json({
+              success: true,
+              data: {
+                roles: rolesWithPermissions,
+                permissions: buildTree(permissions),
+              },
             });
-          }));
-          // 4. 构建权限树
-          const buildTree = (items: PermissionTree[], parentId: number | null = null): PermissionTree[] => {
-            return items
-              .filter(item => item.parent_id === parentId)
-              .map(item => ({
-                ...item,
-                children: buildTree(items, item.id)
-              }));
-          };
-          // 5. 返回结果
-          return res.json({
-            success: true,
-            data: {
-              roles: rolesWithPermissions,
-              permissions: buildTree(permissions)
-            }
-          });
-        } catch (error) {
-          console.error('处理角色权限数据失败:', error);
-          return res.json({
-            success: false,
-            data: { message: "处理角色权限数据失败" }
-          });
+          } catch (error) {
+            console.error("处理角色权限数据失败:", error);
+            return res.json({
+              success: false,
+              data: { message: "处理角色权限数据失败" },
+            });
+          }
         }
-      });
+      );
     });
   } catch (error) {
-    console.error('获取角色列表错误:', error);
+    console.error("获取角色列表错误:", error);
     return res.status(401).json({
       success: false,
-      data: { message: "未授权" }
+      data: { message: "未授权" },
     });
   }
 };
@@ -832,8 +848,10 @@ const getUserPermissions = async (req: Request, res: Response) => {
   try {
     const authorizationHeader = req.get("Authorization");
     const accessToken = authorizationHeader?.replace("Bearer ", "");
-    const decoded = jwt.verify(accessToken, secret.jwtSecret) as { username: string };
-    
+    const decoded = jwt.verify(accessToken, secret.jwtSecret) as {
+      username: string;
+    };
+
     const sql = `
       SELECT DISTINCT p.code
       FROM permissions p
@@ -842,29 +860,33 @@ const getUserPermissions = async (req: Request, res: Response) => {
       JOIN users u ON ur.user_id = u.id
       WHERE u.username = ? AND p.status = 1
     `;
-    
-    connection.query<PermissionRow[]>(sql, [decoded.username], (err, results) => {
-      if (err) {
-        Logger.error('获取用户权限失败:', err);
-        return res.json({
-          success: false,
-          message: "获取权限失败"
+
+    connection.query<PermissionRow[]>(
+      sql,
+      [decoded.username],
+      (err, results) => {
+        if (err) {
+          Logger.error("获取用户权限失败:", err);
+          return res.json({
+            success: false,
+            message: "获取权限失败",
+          });
+        }
+
+        const permissions = results.map((row) => row.code);
+        res.json({
+          success: true,
+          data: {
+            permissions,
+          },
         });
       }
-
-      const permissions = results.map(row => row.code);
-      res.json({
-        success: true,
-        data: {
-          permissions
-        }
-      });
-    });
+    );
   } catch (error) {
-    console.error('获取用户权限失败:', error);
+    console.error("获取用户权限失败:", error);
     res.status(401).json({
       success: false,
-      message: "未授权"
+      message: "未授权",
     });
   }
 };
@@ -912,15 +934,13 @@ const searchPage = async (req: Request, res: Response) => {
   });
 };
 
-
-
 const updateRolePermissions = async (req: Request, res: Response) => {
   try {
     const authorizationHeader = req.get("Authorization");
     const accessToken = authorizationHeader.replace("Bearer ", "");
     const decoded = jwt.verify(accessToken, secret.jwtSecret);
     const operator = getOperator(req);
-    
+
     const roleId = req.params.roleId;
     const permissions = req.body.permissions;
 
@@ -928,10 +948,10 @@ const updateRolePermissions = async (req: Request, res: Response) => {
     const getRoleSql = "SELECT name FROM roles WHERE id = ?";
     connection.query(getRoleSql, [roleId], (err, roleResults) => {
       if (err) {
-        Logger.error('获取角色信息失败:', err);
+        Logger.error("获取角色信息失败:", err);
         return res.json({
           success: false,
-          message: "更新权限失败"
+          message: "更新权限失败",
         });
       }
 
@@ -941,10 +961,10 @@ const updateRolePermissions = async (req: Request, res: Response) => {
       const deleteSql = `DELETE FROM role_permissions WHERE role_id = ?`;
       connection.query(deleteSql, [roleId], (err) => {
         if (err) {
-          Logger.error('删除角色权限失败:', err);
+          Logger.error("删除角色权限失败:", err);
           return res.json({
             success: false,
-            message: "更新权限失败"
+            message: "更新权限失败",
           });
         }
 
@@ -956,10 +976,10 @@ const updateRolePermissions = async (req: Request, res: Response) => {
           `;
           connection.query(insertSql, [roleId, permissions], (err) => {
             if (err) {
-              Logger.error('插入角色权限失败:', err);
+              Logger.error("插入角色权限失败:", err);
               return res.json({
                 success: false,
-                message: "更新权限失败"
+                message: "更新权限失败",
               });
             }
 
@@ -968,16 +988,18 @@ const updateRolePermissions = async (req: Request, res: Response) => {
               operatorId: operator.id,
               operatorName: operator.name,
               targetId: Number(roleId),
-              targetType: 'role',
+              targetType: "role",
               action: OperationType.UPDATE,
               module: ModuleType.ROLE,
-              content: `更新角色[${roleName}]的权限：${JSON.stringify(permissions)}`,
-              ip: getClientIP(req)
+              content: `更新角色[${roleName}]的权限：${JSON.stringify(
+                permissions
+              )}`,
+              ip: getClientIP(req),
             });
 
             res.json({
               success: true,
-              message: "更新权限成功"
+              message: "更新权限成功",
             });
           });
         } else {
@@ -986,29 +1008,28 @@ const updateRolePermissions = async (req: Request, res: Response) => {
             operatorId: operator.id,
             operatorName: operator.name,
             targetId: Number(roleId),
-            targetType: 'role',
+            targetType: "role",
             action: OperationType.UPDATE,
             module: ModuleType.ROLE,
             content: `清空角色[${roleName}]的所有权限`,
-            ip: getClientIP(req)
+            ip: getClientIP(req),
           });
 
           res.json({
             success: true,
-            message: "更新权限成功"
+            message: "更新权限成功",
           });
         }
       });
     });
   } catch (error) {
-    Logger.error('更新角色权限错误:', error);
+    Logger.error("更新角色权限错误:", error);
     return res.status(500).json({
       success: false,
-      message: "服务器错误"
+      message: "服务器错误",
     });
   }
 };
-
 
 /**
  * @typedef SearchVague
@@ -1136,7 +1157,7 @@ const getAsyncRoutes = async (req: Request, res: Response) => {
     const authorizationHeader = req.get("Authorization");
     const accessToken = authorizationHeader.replace("Bearer ", "");
     const decoded = jwt.verify(accessToken, secret.jwtSecret);
-    
+
     // 根据用户角色返回对应的路由
     const routes = [
       {
@@ -1145,7 +1166,7 @@ const getAsyncRoutes = async (req: Request, res: Response) => {
         meta: {
           title: "权限管理",
           icon: "lollipop",
-          rank: 10
+          rank: 10,
         },
         children: [
           {
@@ -1153,27 +1174,164 @@ const getAsyncRoutes = async (req: Request, res: Response) => {
             name: "PermissionRole",
             meta: {
               title: "角色权限",
-              roles: ["admin"]
-            }
-          }
-        ]
-      }
+              roles: ["admin"],
+            },
+          },
+        ],
+      },
     ];
 
     res.json({
       success: true,
-      data: routes
+      data: routes,
     });
   } catch (error) {
-    console.error('获取动态路由失败:', error);
+    console.error("获取动态路由失败:", error);
     res.status(401).json({
       success: false,
-      message: "未授权"
+      message: "未授权",
+    });
+  }
+};
+interface ImportResult {
+  affectedRows: number;
+  skipped: boolean;
+}
+
+const importNormalScores = async (req: Request, res: Response) => {
+  try {
+    const { data, fileName, grade, subject } = req.body;
+    const year = "2024";
+
+    // 记录所有数据的处理状态
+    const processedRecords: {
+      stnum: number;
+      n_point: number;
+      status: string;
+      reason?: string;
+    }[] = [];
+
+    const validData = data.filter((row) => {
+      const isValid =
+        row.stnum &&
+        !isNaN(Number(row.stnum)) &&
+        row.n_point !== undefined &&
+        row.n_point !== null &&
+        row.stnum !== "本校學籍號";
+
+      if (!isValid) {
+        processedRecords.push({
+          stnum: row.stnum,
+          n_point: row.n_point,
+          status: "filtered",
+          reason: "数据格式无效",
+        });
+      }
+      return isValid;
+    });
+
+    let successCount = 0;
+    let failedCount = 0;
+
+    const updateQueries = validData.map((row) => {
+      return new Promise((resolve, reject) => {
+        const query = `
+            UPDATE points 
+            SET n_point = ? 
+            WHERE stnum = ? 
+            AND year = ?
+            AND sc_lev = ? 
+            AND subject = ? 
+            AND exam_type LIKE CONCAT('%', ?, '%')
+          `;
+
+        const values = [
+          row.n_point,
+          row.stnum,
+          year,
+          grade,
+          subject,
+          row.exam_type,
+        ];
+
+        connection.query(query, values, (error: any, results: any) => {
+          if (error) {
+            failedCount++;
+            processedRecords.push({
+              stnum: row.stnum,
+              n_point: row.n_point,
+              status: "error",
+              reason: error.message,
+            });
+            resolve({ success: false, error });
+          } else {
+            if (results.affectedRows > 0) {
+              successCount++;
+              processedRecords.push({
+                stnum: row.stnum,
+                n_point: row.n_point,
+                status: "success",
+              });
+            } else {
+              failedCount++;
+              processedRecords.push({
+                stnum: row.stnum,
+                n_point: row.n_point,
+                status: "not_found",
+                reason: "找不到匹配的记录",
+              });
+            }
+            resolve({ success: true, results });
+          }
+        });
+      });
+    });
+
+    await Promise.all(updateQueries);
+
+    // 按状态分类统计
+    const stats = {
+      total: data.length,
+      filtered: processedRecords.filter((r) => r.status === "filtered").length,
+      success: successCount,
+      error: failedCount,
+      not_found: processedRecords.filter((r) => r.status === "not_found")
+        .length,
+    };
+
+    // 获取未成功处理的记录
+    const failedRecords = processedRecords.filter(
+      (r) => r.status !== "success"
+    );
+
+    res.json({
+      success: true,
+      message: "导入完成",
+      stats,
+      failedRecords,
+    });
+  } catch (error) {
+    console.error("导入失败:", error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "导入失败",
     });
   }
 };
 export {
-  captcha, deleteList, getAsyncRoutes, getRoleList, getUserList, getUserPermissions, login, refreshToken, register, searchPage,
-  searchVague, updateList, updateRolePermissions, upload
+  captcha,
+  deleteList,
+  getAsyncRoutes,
+  getRoleList,
+  getUserList,
+  getUserPermissions,
+  login,
+  refreshToken,
+  register,
+  searchPage,
+  searchVague,
+  updateList,
+  updateRolePermissions,
+  upload,
+  importNormalScores,
 };
-
